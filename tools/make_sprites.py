@@ -443,6 +443,8 @@ GIANT_ROWS = [('walk', 6), ('grab', 4), ('kneel', 3), ('death', 6), ('guard', 2)
 G_THIGH, G_SHIN, G_TORSO, G_NECK, G_HEAD = 25.0, 25.0, 38.0, 4.0, 15.0
 G_UARM, G_FARM = 24.0, 22.0
 G_HEIGHT = G_THIGH + G_SHIN + G_TORSO + G_NECK + G_HEAD * 2   # 117
+G_HEAD_UP, G_HEAD_FWD = G_HEAD * 0.85, 3.0      # 목 위에서 머리 중심까지 (위, 앞)
+G_NAPE_UP, G_NAPE_FWD = G_NECK + 3.0, -9.0      # 어깨선에서 목덜미까지 (위, 앞)
 
 SKIN = (240, 236, 228, 255)
 SKIN_BACK = (206, 202, 196, 255)
@@ -459,7 +461,7 @@ def giant_pose(P):
     hip = (0.0, 0.0)
     sh = add(hip, mul(up, G_TORSO))
     neck_top = add(sh, mul(up, G_NECK))
-    head = add(add(neck_top, mul(up, G_HEAD * 0.85)), mul(fwd, 3.0 + P.get('head_fwd', 0.0)))
+    head = add(add(neck_top, mul(up, G_HEAD_UP)), mul(fwd, G_HEAD_FWD + P.get('head_fwd', 0.0)))
     legs = []
     for th, kn in P['legs']:
         knee = add(hip, mul(down_dir(th), G_THIGH))
@@ -476,7 +478,7 @@ def giant_pose(P):
             elbow = add(sh, mul(down_dir(ua), G_UARM))
             hand = add(elbow, mul(down_dir(ua + el), G_FARM))
             arms.append((elbow, hand))
-    nape = add(add(sh, mul(up, G_NECK + 3.0)), mul(fwd, -9.0))
+    nape = add(add(sh, mul(up, G_NAPE_UP)), mul(fwd, G_NAPE_FWD))
     pts = dict(hip=hip, sh=sh, head=head, legs=legs, arms=arms, nape=nape, up=up, fwd=fwd)
     if P.get('ground', True):
         low = min(f[1] for _, f in legs)
@@ -496,7 +498,8 @@ def giant_pose(P):
     return pts
 
 
-def draw_giant(pen, pts, armored=False, rock=False):
+def draw_giant(pen, pts, armored=False, rock=False, head=True):
+    """head=False 면 기본 머리(동그란 머리·그늘·텅 빈 눈·꿰맨 웃음)를 그리지 않는다 (종류별 머리를 따로 그릴 때)"""
     hip, sh, up, fwd = pts['hip'], pts['sh'], pts['up'], pts['fwd']
     (be, bh), (fe, fh) = pts['arms']
     (bk, bf), (fk, ff) = pts['legs']
@@ -531,22 +534,23 @@ def draw_giant(pen, pts, armored=False, rock=False):
             pen.line(corners + [corners[0]], PLATE, 1.6)
     # 목·머리
     pen.limb(sh, add(sh, mul(up, G_NECK + 4)), 10, SKIN)
-    head = pts['head']
-    pen.circle(head, G_HEAD, SKIN)
-    # 뒤통수 그늘
-    shade = [add(head, mul(polar(math.atan2(up[1], up[0]) + math.pi / 2 + t * math.pi / 8), G_HEAD))
-             for t in range(9)]
-    pen.poly(shade + [add(head, mul(up, -G_HEAD * 0.2))], SKIN_SHADE)
-    # 텅 빈 눈과 꿰맨 웃음
-    for ex in (2.5, 9.0):
-        pen.ellipse(add(add(head, mul(fwd, ex)), mul(up, 3.0)), 2.6, 3.4, HOLE)
-    mouth = []
-    for i in range(11):
-        t = i / 10
-        mouth.append(add(add(head, mul(fwd, -6 + 18 * t)), mul(up, -5.5 - 3.2 * math.sin(t * math.pi) + 1.5 * t)))
-    pen.line(mouth, (60, 38, 40, 255), 1.6)
-    for q in mouth[1:-1]:
-        pen.line([add(q, mul(up, 1.6)), add(q, mul(up, -1.8))], (60, 38, 40, 255), 0.9)
+    if head:
+        head = pts['head']
+        pen.circle(head, G_HEAD, SKIN)
+        # 뒤통수 그늘
+        shade = [add(head, mul(polar(math.atan2(up[1], up[0]) + math.pi / 2 + t * math.pi / 8), G_HEAD))
+                 for t in range(9)]
+        pen.poly(shade + [add(head, mul(up, -G_HEAD * 0.2))], SKIN_SHADE)
+        # 텅 빈 눈과 꿰맨 웃음
+        for ex in (2.5, 9.0):
+            pen.ellipse(add(add(head, mul(fwd, ex)), mul(up, 3.0)), 2.6, 3.4, HOLE)
+        mouth = []
+        for i in range(11):
+            t = i / 10
+            mouth.append(add(add(head, mul(fwd, -6 + 18 * t)), mul(up, -5.5 - 3.2 * math.sin(t * math.pi) + 1.5 * t)))
+        pen.line(mouth, (60, 38, 40, 255), 1.6)
+        for q in mouth[1:-1]:
+            pen.line([add(q, mul(up, 1.6)), add(q, mul(up, -1.8))], (60, 38, 40, 255), 0.9)
     # 앞쪽 팔
     pen.limb(sh, fe, 8.5, SKIN)
     pen.limb(fe, fh, 7.5, SKIN)
@@ -605,7 +609,7 @@ def giant_poses():
             (flat + 0.04, -8.5, 20, [(-1.1, 0.3), (-1.05, 0.2)], [(-1.25, 0.05), (-1.05, 0.15)])):
         rows['death'].append(dict(lean=lean, legs=legs, arms=arms, head_fwd=1.0,
                                   ground=False, offset=(x, y)))
-    nape_hand = ('ik', lambda sh, up, fwd: add(add(sh, mul(up, G_NECK + 3)), mul(fwd, -8.0)), -1)
+    nape_hand = ('ik', lambda sh, up, fwd: add(add(sh, mul(up, G_NAPE_UP)), mul(fwd, G_NAPE_FWD + 1.0)), -1)
     rows['guard'] = [
         dict(lean=0.12, legs=[(-0.25, 0.2), (0.3, 0.3)], arms=[nape_hand, (0.25, 0.2)]),
         dict(lean=0.08, legs=[(0.25, 0.3), (-0.25, 0.2)], arms=[nape_hand, (-0.2, 0.2)]),
@@ -641,6 +645,411 @@ def make_giants():
     with open(os.path.join(OUT, 'giant_meta.json'), 'w') as f:
         json.dump(meta, f, indent=1)
     print('saved giant_meta.json')
+
+
+# ---------------------------------------------------------------- 거인 종류별 생김새
+HAIR_Y = (238, 200, 74, 255)        # 거인 1: 노란 가르마 단발
+HAIR_Y_DARK = (176, 136, 40, 255)
+FUR = (134, 108, 88, 255)           # 거인 2: 짐승 털
+FUR_BACK = (108, 86, 70, 255)
+FUR_DARK = (86, 66, 54, 255)
+
+
+def head_axes(pts):
+    return pts['head'], pts['up'], pts['fwd']
+
+
+def draw_bob_hair(pen, pts):
+    """노란 단발: 정수리·뒤통수를 덮고 턱선에서 끊긴다. 가르마를 타서 앞머리가 앞쪽으로 넘어간다."""
+    H, up, fwd = head_axes(pts)
+    R = G_HEAD
+
+    def hp(dx, dy):
+        return add(H, add(mul(fwd, dx * R), mul(up, dy * R)))
+    hair = [hp(0.80, 0.42), hp(0.74, 0.70)]                    # 앞머리 끝 → 이마 위
+    for i in range(14):                                       # 정수리 → 뒤통수
+        a = math.radians(62 + 140 * i / 13)
+        hair.append(hp(-0.04 + 1.1 * math.cos(a), 0.08 + 1.1 * math.sin(a)))
+    hair += [hp(-1.12, -0.42), hp(-1.04, -0.98), hp(-0.30, -1.02),    # 뒤로 떨어져 턱선에서 일자로 끊긴다
+             hp(-0.22, -0.55), hp(-0.30, 0.02), hp(0.05, 0.46)]       # 귀 앞 옆머리 → 가르마 쪽 앞머리 밑단
+    pen.poly(hair, HAIR_Y)
+    pen.line([hp(0.42, 1.0), hp(0.10, 1.12), hp(-0.30, 1.04)], HAIR_Y_DARK, 1.4)   # 가르마
+
+
+def draw_bob_face(pen, pts):
+    """기존 거인과 같은 그림체(단색 도형, 검은 눈)로 생김새만 다르게:
+    위아래로 긴 달걀형 밝은 얼굴(그늘 없음: 얼굴 아래 그늘이 수염처럼 보여서), 기존보다 작은 세로 눈, 입 없음"""
+    H, up, fwd = head_axes(pts)
+    R = G_HEAD
+    ang = math.atan2(up[1], up[0])
+
+    def at(a, rx, ry):   # 머리 기준 각도 a (0 = 위쪽, + = 뒤쪽으로 돈다)
+        return add(H, add(mul(up, ry * R * math.cos(a)), mul(fwd, -rx * R * math.sin(a))))
+    # 달걀형 머리: 위는 둥글고 턱 쪽은 조금 좁다
+    head = []
+    for i in range(32):
+        a = i / 32 * 2 * math.pi
+        rx = 0.92 - 0.14 * max(0.0, -math.cos(a))
+        head.append(at(a, rx, 1.08))
+    pen.poly(head, SKIN)
+    # 기존 거인과 같은 세로로 긴 검은 눈. 앞머리에서 떨어진 얼굴 가운데, 뒤쪽 눈은 조금 작게 (옆모습 원근)
+    for ex, ey, rx, ry in ((3.2, 0.6, 1.7, 2.4), (9.2, 0.4, 2.0, 2.8)):
+        pen.ellipse(add(add(H, mul(fwd, ex)), mul(up, ey)), rx, ry, HOLE)
+
+
+def draw_giant_bob(pen, pts, rock=False):
+    draw_giant(pen, pts, False, rock, head=False)
+    draw_bob_face(pen, pts)
+    draw_bob_hair(pen, pts)
+    # 앞팔이 머리를 가리는 동작(막기 등)이 있어 앞팔을 다시 얹는다
+    (fe, fh) = pts['arms'][1]
+    pen.limb(pts['sh'], fe, 8.5, SKIN)
+    pen.limb(fe, fh, 7.5, SKIN)
+    pen.circle(fh, 5.6, SKIN)
+    if rock:
+        pen.circle(add(fh, mul(pts['up'], 5)), 7.0, (92, 88, 86, 255))
+
+
+# 짐승 거인: 짧고 굵은 다리, 크고 긴 몸통, 솟은 어깨 혹, 땅에 닿을 듯한 긴 팔, 혹 앞 아래에 붙은 아주 작은 머리
+BEAST = dict(G_THIGH=19.0, G_SHIN=17.0, G_TORSO=46.0, G_NECK=0.0, G_HEAD=6.5,
+             G_UARM=25.0, G_FARM=23.0, G_HEAD_UP=3.0, G_HEAD_FWD=13.0, G_NAPE_UP=5.5, G_NAPE_FWD=4.0)
+
+
+def furry(poly, step, length, seed):
+    """다각형 가장자리를 따라 바깥으로 털 뭉치를 뾰족뾰족 낸다"""
+    rnd = random.Random(seed)
+    area = sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(poly, poly[1:] + poly[:1]))
+    sign = 1 if area > 0 else -1
+    out = []
+    for a, b in zip(poly, poly[1:] + poly[:1]):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        ln = math.hypot(dx, dy) or 1.0
+        nrm = (dy / ln * sign, -dx / ln * sign)
+        m = max(1, int(ln / step))
+        for k in range(m):
+            t = k / m
+            out.append((a[0] + dx * t, a[1] + dy * t))
+            tm = t + 0.5 / m
+            tip = (a[0] + dx * tm, a[1] + dy * tm)
+            out.append(add(tip, mul(nrm, length * rnd.uniform(0.55, 1.0))))
+    return out
+
+
+def furry_limb(pen, a, b, w, col, seed, tuft=3.0):
+    """털 덮인 팔다리: 굵은 막대 + 양옆으로 삐죽 나온 털 뭉치"""
+    rnd = random.Random(seed)
+    pen.limb(a, b, w, col)
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    ln = math.hypot(dx, dy) or 1.0
+    d = (dx / ln, dy / ln)
+    n = (-d[1], d[0])
+    count = max(2, int(ln / 5))
+    for i in range(count):
+        t = (i + 0.5) / count
+        p = add(a, mul((dx, dy), t))
+        for side in (1, -1):
+            edge = add(p, mul(n, side * (w / 2 - 0.6)))
+            tip = add(add(edge, mul(n, side * tuft * rnd.uniform(0.6, 1.0))), mul(d, rnd.uniform(0.5, 2.5)))
+            pen.poly([add(edge, mul(d, -2.0)), tip, add(edge, mul(d, 2.0))], col)
+
+
+def draw_giant_beast(pen, pts, rock=False):
+    hip, sh, up, fwd = pts['hip'], pts['sh'], pts['up'], pts['fwd']
+    (be, bh), (fe, fh) = pts['arms']
+    (bk, bf), (fk, ff) = pts['legs']
+    T = G_TORSO
+
+    def tp(a, b):
+        return add(add(hip, mul(fwd, a)), mul(up, b))
+    # 뒤쪽 팔·다리
+    furry_limb(pen, sh, be, 13.0, FUR_BACK, 1)
+    furry_limb(pen, be, bh, 11.5, FUR_BACK, 2)
+    pen.circle(bh, 6.5, SKIN_BACK)
+    furry_limb(pen, hip, bk, 17.0, FUR_BACK, 3)
+    furry_limb(pen, bk, bf, 14.0, FUR_BACK, 4)
+    pen.ellipse(add(bf, mul(fwd, 4)), 8.5, 4.0, SKIN_BACK)
+    # 몸통: 엉덩이 → 불룩한 배 → 앞으로 솟은 가슴 → 등 위로 솟은 혹
+    body = [tp(-15, -4), tp(14, -4), tp(21, 12), tp(24, T - 14), tp(20, T - 2), tp(8, T + 4),
+            tp(-6, T + 10), tp(-20, T + 4), tp(-26, T - 10), tp(-22, 12)]
+    pen.poly(furry(body, 5.5, 4.2, 5), FUR)
+    pen.poly(body, FUR)
+    rnd = random.Random(6)
+    for i in range(26):                                       # 털결
+        a, b = rnd.uniform(-20, 18), rnd.uniform(0, T + 2)
+        q = tp(a, b)
+        pen.line([q, add(add(q, mul(up, -4.0)), mul(fwd, -1.5))], FUR_DARK, 1.0)
+    # 앞쪽 다리
+    furry_limb(pen, hip, fk, 18.0, FUR, 7)
+    furry_limb(pen, fk, ff, 15.0, FUR, 8)
+    pen.ellipse(add(ff, mul(fwd, 4)), 9.0, 4.2, SKIN)
+    # 아주 작은 머리: 혹 앞 아래, 뒤로 털 갈기
+    head = pts['head']
+    R = G_HEAD
+    mane = [add(head, mul(polar(math.atan2(up[1], up[0]) + math.pi * (0.2 + 1.1 * t / 10)), R + 4.5)) for t in range(11)]
+    pen.poly(furry([head] + mane, 2.5, 2.5, 9), FUR)
+    pen.circle(head, R, SKIN)
+    for ex in (2.0, 4.6):
+        pen.ellipse(add(add(head, mul(fwd, ex)), mul(up, 1.4)), 0.9, 1.3, HOLE)
+    pen.line([add(add(head, mul(fwd, 0.5)), mul(up, -2.6)), add(add(head, mul(fwd, 5.0)), mul(up, -2.2))],
+             (60, 38, 40, 255), 0.9)
+    # 앞쪽 팔
+    furry_limb(pen, sh, fe, 14.0, FUR, 10)
+    furry_limb(pen, fe, fh, 12.5, FUR, 11)
+    pen.circle(fh, 7.0, SKIN)
+    if rock:
+        pen.circle(add(fh, mul(up, 6)), 8.0, (92, 88, 86, 255))
+
+
+# 갑옷 거인: 근육질 체형(넓은 어깨, 굵은 팔다리·목)을 온몸 단단한 판이 감싼다. 각진 얼굴, 깊은 눈, 굳은 입
+PLATED = dict(G_THIGH=25.0, G_SHIN=24.0, G_TORSO=40.0, G_NECK=5.0, G_HEAD=12.5,
+              G_UARM=24.0, G_FARM=23.0, G_HEAD_UP=10.5, G_HEAD_FWD=3.0, G_NAPE_UP=8.0, G_NAPE_FWD=-9.0)
+PL = (226, 218, 200, 255)           # 판
+PL_HI = (248, 244, 234, 255)        # 판 윗면 빛
+PL_BACK = (192, 184, 168, 255)      # 뒤쪽 팔다리의 판
+PL_SEAM = (112, 96, 82, 255)        # 이음매
+PL_UNDER = (128, 98, 90, 255)       # 판 사이로 보이는 속살(관절)
+
+
+def plate_limb(pen, a, b, w, col, seed_hi=True):
+    """관절은 속살, 마디는 판으로 덮인 팔다리 한 마디"""
+    pen.limb(a, b, w * 0.8, PL_UNDER)
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    ln = math.hypot(dx, dy) or 1.0
+    d = (dx / ln, dy / ln)
+    n = (-d[1], d[0])
+    a2, b2 = add(a, mul(d, w * 0.25)), add(b, mul(d, -w * 0.3))
+    h1, h2 = w * 0.56, w * 0.5
+    quad = [add(a2, mul(n, h1)), add(b2, mul(n, h2)), add(b2, mul(n, -h2)), add(a2, mul(n, -h1))]
+    pen.poly(quad, col)
+    pen.circle(mul(add(quad[0], quad[3]), 0.5), h1 * 0.98, col)
+    pen.line(quad + [quad[0]], PL_SEAM, 0.9)
+    if seed_hi:
+        pen.line([add(a2, mul(n, h1 * 0.55)), add(b2, mul(n, h2 * 0.55))], PL_HI, 1.0)
+    mid = mul(add(a2, b2), 0.5)
+    pen.line([add(mid, mul(n, h1)), add(mid, mul(n, -h1))], PL_SEAM, 0.7)
+
+
+def draw_giant_plated(pen, pts, rock=False):
+    hip, sh, up, fwd = pts['hip'], pts['sh'], pts['up'], pts['fwd']
+    (be, bh), (fe, fh) = pts['arms']
+    (bk, bf), (fk, ff) = pts['legs']
+    T = G_TORSO
+
+    def tp(a, b):
+        return add(add(hip, mul(fwd, a)), mul(up, b))
+    # 뒤쪽 팔·다리
+    plate_limb(pen, sh, be, 12.5, PL_BACK, False)
+    plate_limb(pen, be, bh, 11.5, PL_BACK, False)
+    pen.circle(bh, 6.5, PL_BACK)
+    plate_limb(pen, hip, bk, 15.0, PL_BACK, False)
+    plate_limb(pen, bk, bf, 13.0, PL_BACK, False)
+    pen.ellipse(add(bf, mul(fwd, 3.5)), 7.5, 3.8, PL_BACK)
+    # 몸통: 넓은 어깨에서 허리로 좁아지는 역삼각형
+    body = [tp(-9, -3), tp(10, -3), tp(12, 12), tp(18, T - 7), tp(13, T + 4), tp(-14, T + 4),
+            tp(-20, T - 8), tp(-12, 12)]
+    pen.poly(body, PL_UNDER)
+    back = [tp(-8.5, -2), tp(-1, -2), tp(-3, 14), tp(-6, T - 4), tp(-13, T + 3), tp(-19, T - 8), tp(-11.5, 12)]
+    pen.poly(back, PL_BACK)
+    pen.line(back + [back[0]], PL_SEAM, 0.9)
+    # 가슴판 2장
+    for poly in ([tp(-4, T - 15), tp(7, T - 16), tp(16, T - 8), tp(12, T + 3), tp(-4, T + 3)],
+                 [tp(-5, T - 14), tp(-4, T + 2), tp(-12, T + 2), tp(-11, T - 12)]):
+        pen.poly(poly, PL)
+        pen.line(poly + [poly[0]], PL_SEAM, 1.0)
+    pen.line([tp(-1, T - 3), tp(8, T - 2), tp(13, T - 6)], PL_HI, 1.0)
+    # 배를 덮는 마디판 (3줄 × 2칸)
+    for i in range(3):
+        y0, y1 = T - 17 - i * 8.5, T - 24.5 - i * 8.5
+        for x0, x1 in ((-3.0, 4.0), (4.6, 11.0 - i * 0.8)):
+            cell = [tp(x0, y0), tp(x1, y0 - 0.4), tp(x1 - 0.4, y1), tp(x0 + 0.3, y1 + 0.3)]
+            pen.poly(cell, PL)
+            pen.line(cell + [cell[0]], PL_SEAM, 0.8)
+    # 골반 판
+    hipplate = [tp(-9, -3), tp(11, -3), tp(12, 6), tp(-10, 6)]
+    pen.poly(hipplate, PL)
+    pen.line(hipplate + [hipplate[0]], PL_SEAM, 0.9)
+    # 앞쪽 다리: 허벅지 판, 무릎 덮개, 정강이 판, 발 덮개
+    plate_limb(pen, hip, fk, 16.0, PL)
+    plate_limb(pen, fk, ff, 14.0, PL)
+    pen.circle(fk, 6.5, PL)
+    pen.line([add(fk, mul(fwd, 6.0)), add(fk, mul(up, 6.0)), add(fk, mul(fwd, -6.0))], PL_SEAM, 0.9)
+    foot = add(ff, mul(fwd, 3.5))
+    pen.ellipse(foot, 8.2, 4.0, PL)
+    pen.line([add(foot, mul(fwd, -2)), add(add(foot, mul(fwd, 4)), mul(up, 2.5))], PL_SEAM, 0.8)
+    # 굵은 목: 세로로 겹친 판
+    neck_top = add(sh, mul(up, G_NECK + 5))
+    pen.limb(sh, neck_top, 14, PL_UNDER)
+    for k in (-4.5, 0.0, 4.5):
+        a, b = add(sh, mul(fwd, k)), add(neck_top, mul(fwd, k * 0.8))
+        pen.limb(a, b, 4.0, PL)
+        pen.line([a, b], PL_SEAM, 0.5)
+    # 각진 머리
+    H, R = pts['head'], G_HEAD
+
+    def hp(dx, dy):
+        return add(H, add(mul(fwd, dx * R), mul(up, dy * R)))
+    head = [hp(-0.9, 0.55), hp(-0.55, 1.0), hp(0.45, 1.02), hp(0.95, 0.6), hp(1.0, -0.2), hp(0.85, -0.85),
+            hp(0.45, -1.08), hp(-0.35, -1.0), hp(-0.95, -0.4)]
+    pen.poly(head, PL)
+    pen.line(head + [head[0]], PL_SEAM, 1.0)
+    pen.line([hp(-0.5, 0.95), hp(-0.8, 0.0), hp(-0.55, -0.85)], PL_SEAM, 0.9)        # 옆머리 판
+    pen.line([hp(-0.3, 0.98), hp(0.1, 0.62), hp(0.95, 0.62)], PL_SEAM, 0.8)          # 이마 판
+    pen.line([hp(0.05, 0.40), hp(0.55, 0.36), hp(0.98, 0.30)], PL_SEAM, 2.2)         # 두꺼운 눈썹뼈
+    for dx in (0.22, 0.70):                                                           # 깊고 가는 눈
+        c = hp(dx, 0.14)
+        pen.ellipse(c, 2.4, 1.0, HOLE)
+        pen.circle(add(c, mul(fwd, 0.6)), 0.45, (230, 220, 200, 255))
+    pen.line([hp(0.82, 0.25), hp(1.0, -0.25), hp(0.86, -0.32)], PL_SEAM, 0.9)        # 코
+    pen.line([hp(0.35, -0.55), hp(0.92, -0.52)], HOLE, 1.3)                           # 굳게 다문 입
+    pen.line([hp(0.10, -0.30), hp(0.25, -0.95), hp(0.6, -1.06)], PL_SEAM, 0.9)        # 턱 판
+    # 앞쪽 팔: 어깨 보호대(견갑) → 위팔 판 → 팔뚝 보호대 → 주먹
+    plate_limb(pen, sh, fe, 13.5, PL)
+    plate_limb(pen, fe, fh, 12.5, PL)
+    pen.circle(fh, 7.0, PL)
+    pen.line([add(fh, mul(fwd, -4)), add(fh, mul(fwd, 4))], PL_SEAM, 0.8)
+    pad = add(add(sh, mul(fwd, 1.5)), mul(up, -1.0))
+    pen.circle(pad, 10.0, PL)
+    for r in (10.0, 6.5):
+        arc = [add(pad, mul(polar(math.atan2(up[1], up[0]) + math.pi * (-0.55 + 1.1 * t / 8)), r)) for t in range(9)]
+        pen.line(arc, PL_SEAM, 0.9)
+    pen.line([add(pad, mul(up, 7.5)), add(add(pad, mul(up, 4.0)), mul(fwd, 6.0))], PL_HI, 1.0)
+    if rock:
+        pen.circle(add(fh, mul(up, 6)), 8.0, (92, 88, 86, 255))
+
+
+# 망치 거인: 마르고 긴 잿빛 몸(돌을 깎은 듯한 선), 눈 틈 하나만 있는 매끈한 머리, 뒤쪽 손에 긴 자루 돌망치
+MAUL = dict(G_THIGH=27.0, G_SHIN=27.0, G_TORSO=38.0, G_NECK=6.0, G_HEAD=10.0,
+            G_UARM=26.0, G_FARM=24.0, G_HEAD_UP=9.0, G_HEAD_FWD=2.5, G_NAPE_UP=8.0, G_NAPE_FWD=-7.5)
+ASH = (198, 198, 192, 255)
+ASH_BACK = (160, 160, 156, 255)
+ASH_LINE = (112, 112, 110, 255)
+ASH_HI = (226, 226, 222, 255)
+HAFT = (112, 86, 62, 255)
+MAUL_HEAD = (128, 124, 118, 255)
+MAUL_EDGE = (82, 80, 78, 255)
+
+
+def ash_limb(pen, a, b, w, col, carve=True):
+    """돌을 깎은 듯한 팔다리 한 마디: 가운데 홈 선 하나"""
+    pen.limb(a, b, w, col)
+    if carve:
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        ln = math.hypot(dx, dy) or 1.0
+        d, n = (dx / ln, dy / ln), (-dy / ln, dx / ln)
+        pen.line([add(add(a, mul(d, w * 0.5)), mul(n, w * 0.15)), add(add(b, mul(d, -w * 0.5)), mul(n, -w * 0.1))],
+                 ASH_LINE, 0.7)
+
+
+def draw_maul(pen, hand, up, fwd):
+    """긴 자루 돌망치: 손에서 아래·뒤로 늘어뜨린 자루 끝에 네모난 돌덩이"""
+    down = mul(up, -1)
+    tip = add(add(hand, mul(down, 34.0)), mul(fwd, -6.0))
+    top = add(add(hand, mul(down, -14.0)), mul(fwd, 2.4))
+    pen.line([top, tip], HAFT, 2.6)
+    d = add(tip, mul(top, -1))
+    ln = math.hypot(*d) or 1.0
+    d = mul(d, 1 / ln)
+    n = (-d[1], d[0])
+    c = add(tip, mul(d, 2.0))
+    block = [add(add(c, mul(n, 9.0)), mul(d, -5.0)), add(add(c, mul(n, 9.0)), mul(d, 5.0)),
+             add(add(c, mul(n, -9.0)), mul(d, 5.0)), add(add(c, mul(n, -9.0)), mul(d, -5.0))]
+    pen.poly(block, MAUL_HEAD)
+    pen.line(block + [block[0]], MAUL_EDGE, 1.0)
+    for k in (-4.5, 0.0, 4.5):
+        pen.line([add(add(c, mul(n, k)), mul(d, -5.0)), add(add(c, mul(n, k)), mul(d, 5.0))], MAUL_EDGE, 0.6)
+
+
+def draw_giant_maul(pen, pts, rock=False):
+    hip, sh, up, fwd = pts['hip'], pts['sh'], pts['up'], pts['fwd']
+    (be, bh), (fe, fh) = pts['arms']
+    (bk, bf), (fk, ff) = pts['legs']
+    T = G_TORSO
+
+    def tp(a, b):
+        return add(add(hip, mul(fwd, a)), mul(up, b))
+    # 망치는 뒤쪽 손에, 몸 뒤로
+    draw_maul(pen, bh, up, fwd)
+    ash_limb(pen, sh, be, 7.0, ASH_BACK, False)
+    ash_limb(pen, be, bh, 6.0, ASH_BACK, False)
+    pen.circle(bh, 4.6, ASH_BACK)
+    ash_limb(pen, hip, bk, 9.0, ASH_BACK, False)
+    ash_limb(pen, bk, bf, 7.5, ASH_BACK, False)
+    pen.ellipse(add(bf, mul(fwd, 3)), 6.0, 2.8, ASH_BACK)
+    # 마른 몸통: 갈비뼈 쪽이 드러나는 홈 선
+    body = [tp(-7, -3), tp(8, -3), tp(8, 14), tp(11, T - 6), tp(8, T + 3), tp(-10, T + 3), tp(-12, T - 8), tp(-9, 14)]
+    pen.poly(body, ASH)
+    back = [tp(-7, -2), tp(-2, -2), tp(-4, 15), tp(-5, T - 2), tp(-10, T + 3), tp(-12, T - 8), tp(-9, 14)]
+    pen.poly(back, ASH_BACK)
+    pen.line([tp(1, T + 2), tp(2, T - 10), tp(1.5, 3)], ASH_LINE, 0.9)
+    for i in range(5):
+        y = T - 6 - i * 4.2
+        pen.line([tp(2.5, y), tp(7.5, y - 1.6), tp(10, y - 0.6)], ASH_LINE, 0.8)
+    pen.line([tp(3, T - 1), tp(9, T - 3)], ASH_HI, 1.0)
+    pen.line([tp(8, 9), tp(3, 0)], ASH_LINE, 0.9)
+    # 앞쪽 다리
+    ash_limb(pen, hip, fk, 10.0, ASH)
+    ash_limb(pen, fk, ff, 8.5, ASH)
+    pen.circle(fk, 4.6, ASH)
+    pen.ellipse(add(ff, mul(fwd, 3)), 6.5, 3.0, ASH)
+    # 목·매끈한 머리 + 가로 눈 틈 하나
+    neck_top = add(sh, mul(up, G_NECK + 4))
+    pen.limb(sh, neck_top, 7.5, ASH)
+    pen.line([add(sh, mul(fwd, 2)), add(neck_top, mul(fwd, -1.5))], ASH_LINE, 0.7)
+    H, R = pts['head'], G_HEAD
+
+    def hp(dx, dy):
+        return add(H, add(mul(fwd, dx * R), mul(up, dy * R)))
+    head = [add(H, add(mul(fwd, 0.9 * R * math.cos(t)), mul(up, 1.12 * R * math.sin(t))))
+            for t in (i / 28 * 2 * math.pi for i in range(28))]
+    pen.poly(head, ASH)
+    pen.line([hp(-0.6, 0.8), hp(-0.85, 0.0), hp(-0.55, -0.85)], ASH_LINE, 0.8)
+    pen.line([hp(0.15, 0.22), hp(0.92, 0.20)], HOLE, 1.3)
+    pen.line([hp(0.0, 0.95), hp(0.55, 0.75)], ASH_HI, 1.0)
+    # 앞쪽 팔
+    ash_limb(pen, sh, fe, 7.5, ASH)
+    ash_limb(pen, fe, fh, 6.5, ASH)
+    pen.circle(fh, 5.0, ASH)
+    if rock:
+        pen.circle(add(fh, mul(up, 5)), 7.0, (92, 88, 86, 255))
+
+
+def make_giant_kind(sheet, draw_fn, overrides=None, meta_name=None):
+    """거인 한 종류의 시트를 만든다 (껍질 버전은 만들지 않는다). overrides 로 몸 비율을 바꾸고, meta_name 이 있으면 목덜미 좌표를 따로 저장"""
+    g = globals()
+    overrides = overrides or {}
+    saved = {k: g[k] for k in overrides}
+    g.update(overrides)
+    try:
+        poses = giant_poses()
+        height = G_THIGH + G_SHIN + G_TORSO + G_NECK + G_HEAD * 2
+        meta = {'cell': GIANT_CELL, 'cell_px': GIANT_PX, 'base': GIANT_BASE, 'height': height,
+                'rows': [[r, n] for r, n in GIANT_ROWS], 'nape': {}}
+        rows = []
+        for row, n in GIANT_ROWS:
+            frames, napes = [], []
+            for P in poses[row]:
+                img = Image.new('RGBA', (GIANT_PX * S, GIANT_PX * S), CLEAR)
+                pen = Pen(img, GIANT_PX / 2, GIANT_PX - GIANT_BASE * GIANT_K, GIANT_K)
+                pts = giant_pose(P)
+                draw_fn(pen, pts, P.get('rock', False))
+                frames.append(ImageOps.mirror(shrink(img)))
+                napes.append((round(-pts['nape'][0], 1), round(pts['nape'][1], 1)))
+            rows.append(frames)
+            meta['nape'][row] = napes
+        save(make_sheet(rows, GIANT_PX, GIANT_PX), sheet + '.png')
+    finally:
+        g.update(saved)
+    if meta_name:
+        with open(os.path.join(OUT, meta_name), 'w') as f:
+            json.dump(meta, f, indent=1)
+        print('saved', meta_name)
+
+
+def make_giant_kinds():
+    make_giant_kind('giant_bob', draw_giant_bob)                                   # 목덜미 좌표는 giant_meta.json 과 같다
+    make_giant_kind('giant_beast', draw_giant_beast, BEAST, 'giant_beast_meta.json')
+    make_giant_kind('giant_plated', draw_giant_plated, PLATED, 'giant_plated_meta.json')
+    make_giant_kind('giant_maul', draw_giant_maul, MAUL, 'giant_maul_meta.json')
 
 
 # ================================================================ 소품 · 지형
@@ -1310,6 +1719,7 @@ if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
     make_hero()
     make_giants()
+    make_giant_kinds()
     make_props()
     make_story_props()
     make_lanes()
