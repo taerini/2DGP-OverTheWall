@@ -24,9 +24,11 @@ class Ally:
     NAME = ''
     FORT_DMG = 8.0
     FORT_CD = 1.6
+    SHEET = 'ally.png'       # 초록 망토
+    SIZE = SCALE             # 그리는 크기 (주인공 = 1.0)
 
     def __init__(self, index):
-        self.image = render.image('ally.png')
+        self.image = render.image(self.SHEET)
         self.index = index
         p = play_mode.player
         self.x, self.y = p.x - 40, p.y + 60
@@ -159,26 +161,29 @@ class Ally:
             row, fr = 'air', 1
         r = ROWS.index(row)
         alpha = 0.4 if not self.alive() or (self.invuln > 0 and int(self.invuln * 12) % 2) else 1.0
-        # 망토는 모두 조사병단 초록. 누구인지는 이름 색으로 구분한다
+        # 리바이는 작게, 미카사는 빨간 목도리, 조사병은 초록 망토 그대로
+        size = self.SIZE
         self.image.opacify(alpha)
         sx, sy = camera.to_screen(self.x, self.y)
         self.image.clip_composite_draw(fr * CELL, (len(ROWS) - 1 - r) * CELL, CELL, CELL, rad * self.face,
-                                       '' if self.face > 0 else 'h', sx, sy + (CELL / 2 - BASE) * SCALE,
-                                       CELL * SCALE, CELL * SCALE)
+                                       '' if self.face > 0 else 'h', sx, sy + (CELL / 2 - BASE) * size,
+                                       CELL * size, CELL * size)
         self.image.opacify(1.0)
+        top = sy + 12 + 33 * size / SCALE    # 머리 위 (크기에 맞춰 체력바·이름을 내린다)
         if not self.alive():
-            render.text(f'회복 {int(self.down_t) + 1}', sx, sy + 50, 11, (200, 200, 200), 'center', alpha=0.8)
+            render.text(f'회복 {int(self.down_t) + 1}', sx, top + 5, 11, (200, 200, 200), 'center', alpha=0.8)
             return
-        render.text(self.NAME, sx, sy + 56, 11, self.COLOR, 'center', alpha=0.8)
+        render.text(self.NAME, sx, top + 11, 11, self.COLOR, 'center', alpha=0.8)
         k = self.hp / self.max_hp
-        render.rect(sx - 12, sy + 45, sx + 12, sy + 48, (10, 10, 14), 160)
-        render.rect(sx - 12, sy + 45, sx - 12 + 24 * k, sy + 48, (120, 220, 130) if k > 0.34 else (255, 120, 90), 230)
+        render.rect(sx - 12, top, sx + 12, top + 3, (10, 10, 14), 160)
+        render.rect(sx - 12, top, sx - 12 + 24 * k, top + 3, (120, 220, 130) if k > 0.34 else (255, 120, 90), 230)
 
 
 class Levi(Ally):
     """한 거인의 목덜미로 날아가 정확히 벤다. 공격력 100%, 한 번에 1마리."""
     COLOR = (160, 195, 255)
     NAME = '리바이'
+    SIZE = SCALE * 2 / 3     # 작은 몸집
     COOLDOWN = 1.6
     POWER = 1.0
 
@@ -212,6 +217,7 @@ class Scout(Levi):
     """조사병: 리바이처럼 움직이지만 느리고 약하다. 공격력 50%."""
     COLOR = (200, 210, 170)
     NAME = '조사병'
+    SIZE = SCALE             # 리바이를 물려받지만 크기는 보통
     COOLDOWN = 2.2
     POWER = 0.5
     FORT_DMG = 5.0
@@ -222,6 +228,7 @@ class Mikasa(Ally):
     """거인들의 목 높이로 앞으로 쭉 돌진하며 지나가는 거인을 우르르 벤다. 공격력 70%, 최대 3마리."""
     COLOR = (255, 175, 165)
     NAME = '미카사'
+    SHEET = 'ally_scarf.png'   # 초록 망토 대신 빨간 목도리
     COOLDOWN = 3.5
     DASH_SPEED = 1150.0
     DASH_LEN = 650.0

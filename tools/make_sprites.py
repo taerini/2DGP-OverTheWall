@@ -123,6 +123,9 @@ BLADE = (232, 244, 255, 255)
 BLADE_GLOW = (150, 205, 255, 110)
 EYE = (235, 245, 245, 255)
 HERO_OUTLINE = (255, 246, 222)    # 주인공만 밝은 테두리를 둘러 동료와 구분한다
+SCARF = (196, 34, 42, 255)        # 미카사: 초록 망토 대신 빨간 목도리
+SCARF_DARK = (122, 18, 26, 255)
+SCARF_EDGE = (238, 98, 92, 255)
 
 
 def cape_shape(anchor, ang, length, bend, wave, phase, w0=2.8, w1=8.6):
@@ -177,6 +180,10 @@ def hero_pose(P):
     ca = P['cape']
     anchor = add(add(sh, mul(up, -1.2)), mul(fwd, -1.6))
     cape, cape_mid = cape_shape(anchor, ca[0], ca[1], ca[2], ca[3], ca[4])
+    # 목도리: 목에 감긴 띠 + 망토와 같은 방향으로 날리는 짧고 가는 꼬리
+    neck_a = add(add(sh, mul(up, 0.9)), mul(fwd, -1.4))
+    neck_b = add(add(sh, mul(up, 0.9)), mul(fwd, 1.5))
+    scarf, scarf_mid = cape_shape(neck_a, ca[0], ca[1] * 0.55, ca[2], ca[3] * 0.8, ca[4] + 0.7, 1.8, 2.4)
 
     hair = []
     for k, (ang, ln) in enumerate([(2.2, 1.9), (2.65, 2.4), (3.05, 2.0), (1.8, 1.3)]):
@@ -188,7 +195,8 @@ def hero_pose(P):
     eye = add(add(head, mul(fwd, HEAD_R * 0.48)), mul(up, 0.5))
 
     pts = dict(hip=hip, sh=sh, head=head, legs=legs, arms=arms, swords=swords,
-               cape=cape, cape_mid=cape_mid, hair=hair, eye=eye)
+               cape=cape, cape_mid=cape_mid, hair=hair, eye=eye,
+               scarf=scarf, scarf_mid=scarf_mid, neck_a=neck_a, neck_b=neck_b)
 
     # 바닥 맞추기: 가장 낮은 발이 y=0 에 닿게
     if P.get('ground', True):
@@ -215,8 +223,8 @@ def map_points(obj, f):
     return obj
 
 
-def draw_hero(pen, pts, body=None):
-    """body = (몸, 뒤쪽 팔다리, 눈) 색. 없으면 검은 실루엣 (동료)"""
+def draw_hero(pen, pts, body=None, wear='cape'):
+    """body = (몸, 뒤쪽 팔다리, 눈) 색. 없으면 검은 실루엣 (동료). wear: cape(초록 망토) / scarf(빨간 목도리)"""
     ink, ink_back, eye = body or (INK, INK_BACK, EYE)
     hip, sh = pts['hip'], pts['sh']
     # 뒤쪽 팔·칼·다리
@@ -228,11 +236,15 @@ def draw_hero(pen, pts, body=None):
     pen.limb(hip, bk, 2.7, ink_back)
     pen.limb(bk, bf, 2.4, ink_back)
     pen.limb(bf, add(bf, (1.6, 0)), 1.8, ink_back)
-    # 망토
-    pen.poly(pts['cape'], CAPE)
-    pen.line(pts['cape'] + [pts['cape'][0]], CAPE_EDGE, 0.55)
-    mid = pts['cape_mid']
-    pen.line(mid[2:-1], CAPE_DARK, 0.7)
+    # 망토 또는 목도리 꼬리
+    if wear == 'scarf':
+        pen.poly(pts['scarf'], SCARF)
+        pen.line(pts['scarf'] + [pts['scarf'][0]], SCARF_EDGE, 0.45)
+    else:
+        pen.poly(pts['cape'], CAPE)
+        pen.line(pts['cape'] + [pts['cape'][0]], CAPE_EDGE, 0.55)
+        mid = pts['cape_mid']
+        pen.line(mid[2:-1], CAPE_DARK, 0.7)
     # 몸통
     pen.limb(hip, sh, 4.8, ink)
     pen.limb(hip, fk, 2.9, ink)
@@ -243,6 +255,9 @@ def draw_hero(pen, pts, body=None):
         pen.poly(tri, ink)
     pen.circle(pts['head'], HEAD_R, ink)
     pen.circle(pts['eye'], 0.62, eye)
+    if wear == 'scarf':
+        pen.limb(pts['neck_a'], pts['neck_b'], 2.3, SCARF)
+        pen.line([pts['neck_a'], pts['neck_b']], SCARF_DARK, 0.5)
     # 앞쪽 팔·칼
     pen.limb(sh, fe, 2.1, ink)
     pen.limb(fe, fh, 2.0, ink)
@@ -328,10 +343,10 @@ def hero_poses():
     return rows
 
 
-def render_hero_cell(P, cell, k, outline=HERO_OUTLINE):
+def render_hero_cell(P, cell, k, outline=HERO_OUTLINE, wear='cape'):
     img = Image.new('RGBA', (cell * S, cell * S), CLEAR)
     pen = Pen(img, cell / 2, cell - HERO_BASE * k, k)
-    draw_hero(pen, hero_pose(P))
+    draw_hero(pen, hero_pose(P), wear=wear)
     img = shrink(img)
     return add_outline(img, outline) if outline else img
 
@@ -346,10 +361,11 @@ def add_outline(img, col):
 
 
 def make_ally(poses=None):
-    """동료용 시트: 주인공과 같은 동작, 몸은 검은 실루엣"""
+    """동료용 시트: 주인공과 같은 동작, 몸은 검은 실루엣. ally.png(초록 망토), ally_scarf.png(빨간 목도리: 미카사)"""
     poses = poses or hero_poses()
-    rows = [[render_hero_cell(P, HERO_CELL, 1.0, None) for P in poses[name]] for name, n in HERO_ROWS]
-    save(make_sheet(rows, HERO_CELL, HERO_CELL), 'ally.png')
+    for wear, name_ in (('cape', 'ally.png'), ('scarf', 'ally_scarf.png')):
+        rows = [[render_hero_cell(P, HERO_CELL, 1.0, None, wear) for P in poses[name]] for name, n in HERO_ROWS]
+        save(make_sheet(rows, HERO_CELL, HERO_CELL), name_)
 
 
 def make_hero():
