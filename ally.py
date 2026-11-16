@@ -24,7 +24,7 @@ class Ally:
     NAME = ''
     FORT_DMG = 8.0
     FORT_CD = 1.6
-    SHEET = 'ally.png'       # 초록 망토
+    SHEET = 'ally1.png'      # 초록 망토
     SIZE = SCALE             # 그리는 크기 (주인공 = 1.0)
 
     def __init__(self, index):
@@ -161,7 +161,7 @@ class Ally:
             row, fr = 'air', 1
         r = ROWS.index(row)
         alpha = 0.4 if not self.alive() or (self.invuln > 0 and int(self.invuln * 12) % 2) else 1.0
-        # 리바이는 작게, 미카사는 빨간 목도리, 조사병은 초록 망토 그대로
+        # 리바이는 작게, 미카사는 빨간 목도리, 아르민은 노란 단발
         size = self.SIZE
         self.image.opacify(alpha)
         sx, sy = camera.to_screen(self.x, self.y)
@@ -213,11 +213,12 @@ class Levi(Ally):
             self.counter(self.target)
 
 
-class Scout(Levi):
-    """조사병: 리바이처럼 움직이지만 느리고 약하다. 공격력 50%."""
+class Armin(Levi):
+    """아르민: 리바이처럼 움직이지만 느리고 약하다. 공격력 50%."""
     COLOR = (200, 210, 170)
-    NAME = '조사병'
-    SIZE = SCALE             # 리바이를 물려받지만 크기는 보통
+    NAME = '아르민'
+    SIZE = SCALE             # 리바이를 물려받지만 크기는 보통 (미카사와 같다)
+    SHEET = 'ally3.png'      # 노란 단발머리 + 초록 망토
     COOLDOWN = 2.2
     POWER = 0.5
     FORT_DMG = 5.0
@@ -228,7 +229,7 @@ class Mikasa(Ally):
     """거인들의 목 높이로 앞으로 쭉 돌진하며 지나가는 거인을 우르르 벤다. 공격력 70%, 최대 3마리."""
     COLOR = (255, 175, 165)
     NAME = '미카사'
-    SHEET = 'ally_scarf.png'   # 초록 망토 대신 빨간 목도리
+    SHEET = 'ally2.png'        # 초록 망토 대신 빨간 목도리
     COOLDOWN = 3.5
     DASH_SPEED = 1150.0
     DASH_LEN = 650.0

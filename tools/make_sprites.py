@@ -126,6 +126,8 @@ HERO_OUTLINE = (255, 246, 222)    # 주인공만 밝은 테두리를 둘러 동�
 SCARF = (196, 34, 42, 255)        # 미카사: 초록 망토 대신 빨간 목도리
 SCARF_DARK = (122, 18, 26, 255)
 SCARF_EDGE = (238, 98, 92, 255)
+BOB = (238, 202, 74, 255)          # 아르민: 노란 단발머리
+BOB_EDGE = (168, 128, 30, 255)
 
 
 def cape_shape(anchor, ang, length, bend, wave, phase, w0=2.8, w1=8.6):
@@ -196,7 +198,8 @@ def hero_pose(P):
 
     pts = dict(hip=hip, sh=sh, head=head, legs=legs, arms=arms, swords=swords,
                cape=cape, cape_mid=cape_mid, hair=hair, eye=eye,
-               scarf=scarf, scarf_mid=scarf_mid, neck_a=neck_a, neck_b=neck_b)
+               scarf=scarf, scarf_mid=scarf_mid, neck_a=neck_a, neck_b=neck_b,
+               hu=add(head, up), hf=add(head, fwd))
 
     # 바닥 맞추기: 가장 낮은 발이 y=0 에 닿게
     if P.get('ground', True):
@@ -223,8 +226,27 @@ def map_points(obj, f):
     return obj
 
 
-def draw_hero(pen, pts, body=None, wear='cape'):
-    """body = (몸, 뒤쪽 팔다리, 눈) 색. 없으면 검은 실루엣 (동료). wear: cape(초록 망토) / scarf(빨간 목도리)"""
+def bob_shape(pts):
+    """단발머리: 정수리·뒤통수를 덮고 턱선까지 내려오며, 이마 위로 앞머리가 일자로 떨어진다"""
+    H = pts['head']
+    up = add(pts['hu'], mul(H, -1))
+    fwd = add(pts['hf'], mul(H, -1))
+    R = HEAD_R
+
+    def hp(dx, dy):
+        return add(H, add(mul(fwd, dx * R), mul(up, dy * R)))
+    pts_ = [hp(0.66, 0.30)]                                  # 앞머리 끝
+    for i in range(12):                                     # 정수리 → 뒤통수 (머리보다 조금 크게)
+        a = math.radians(40 + 140 * i / 11)
+        pts_.append(hp(-0.05 + 1.14 * math.cos(a), 0.06 + 1.14 * math.sin(a)))
+    pts_ += [hp(-1.16, -0.35), hp(-1.08, -0.95), hp(-0.62, -1.02),   # 뒤로 떨어져 턱선에서 끊긴다
+             hp(-0.30, -0.80), hp(-0.22, -0.05), hp(0.12, 0.30)]      # 얼굴 옆선 → 앞머리 밑단
+    return pts_
+
+
+def draw_hero(pen, pts, body=None, wear='cape', hair='spiky'):
+    """body = (몸, 뒤쪽 팔다리, 눈) 색. 없으면 검은 실루엣 (동료).
+    wear: cape(초록 망토) / scarf(빨간 목도리). hair: spiky(뾰족 머리) / bob(노란 단발)"""
     ink, ink_back, eye = body or (INK, INK_BACK, EYE)
     hip, sh = pts['hip'], pts['sh']
     # 뒤쪽 팔·칼·다리
@@ -251,10 +273,15 @@ def draw_hero(pen, pts, body=None, wear='cape'):
     pen.limb(fk, ff, 2.6, ink)
     pen.limb(ff, add(ff, (1.8, -0.1)), 2.0, ink)
     pen.limb(sh, pts['head'], 1.8, ink)
-    for tri in pts['hair']:
-        pen.poly(tri, ink)
+    if hair == 'spiky':
+        for tri in pts['hair']:
+            pen.poly(tri, ink)
     pen.circle(pts['head'], HEAD_R, ink)
     pen.circle(pts['eye'], 0.62, eye)
+    if hair == 'bob':
+        bob = bob_shape(pts)
+        pen.poly(bob, BOB)
+        pen.line(bob + [bob[0]], BOB_EDGE, 0.4)
     if wear == 'scarf':
         pen.limb(pts['neck_a'], pts['neck_b'], 2.3, SCARF)
         pen.line([pts['neck_a'], pts['neck_b']], SCARF_DARK, 0.5)
@@ -343,10 +370,10 @@ def hero_poses():
     return rows
 
 
-def render_hero_cell(P, cell, k, outline=HERO_OUTLINE, wear='cape'):
+def render_hero_cell(P, cell, k, outline=HERO_OUTLINE, wear='cape', hair='spiky'):
     img = Image.new('RGBA', (cell * S, cell * S), CLEAR)
     pen = Pen(img, cell / 2, cell - HERO_BASE * k, k)
-    draw_hero(pen, hero_pose(P), wear=wear)
+    draw_hero(pen, hero_pose(P), wear=wear, hair=hair)
     img = shrink(img)
     return add_outline(img, outline) if outline else img
 
@@ -361,10 +388,13 @@ def add_outline(img, col):
 
 
 def make_ally(poses=None):
-    """동료용 시트: 주인공과 같은 동작, 몸은 검은 실루엣. ally.png(초록 망토), ally_scarf.png(빨간 목도리: 미카사)"""
+    """동료용 시트: 주인공과 같은 동작, 몸은 검은 실루엣.
+    ally1.png(초록 망토: 리바이), ally2.png(빨간 목도리: 미카사), ally3.png(노란 단발 + 초록 망토: 아르민)"""
     poses = poses or hero_poses()
-    for wear, name_ in (('cape', 'ally.png'), ('scarf', 'ally_scarf.png')):
-        rows = [[render_hero_cell(P, HERO_CELL, 1.0, None, wear) for P in poses[name]] for name, n in HERO_ROWS]
+    for wear, hair, name_ in (('cape', 'spiky', 'ally1.png'), ('scarf', 'spiky', 'ally2.png'),
+                              ('cape', 'bob', 'ally3.png')):
+        rows = [[render_hero_cell(P, HERO_CELL, 1.0, None, wear, hair) for P in poses[name]]
+                for name, n in HERO_ROWS]
         save(make_sheet(rows, HERO_CELL, HERO_CELL), name_)
 
 

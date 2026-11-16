@@ -2,7 +2,7 @@ import random
 
 import game_world
 import play_mode
-from ally import Levi, Mikasa, Scout
+from ally import Levi, Mikasa, Armin
 from cannon import Cannon, CartCannon
 from config import LAYER_ALLY, LAYER_BUILDING
 
@@ -52,7 +52,7 @@ def mikasa3(p):
 
 
 def scout3(p):
-    add_allies(Scout, 3)
+    add_allies(Armin, 3)
 
 
 def ally_heal(p):
