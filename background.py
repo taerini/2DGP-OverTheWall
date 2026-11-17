@@ -8,25 +8,24 @@ import render
 from config import *
 
 FAR_P, MID_P, FOG_P = 0.12, 0.4, 0.65
-PX_ZONES = 2                 # 앞에서부터 이 구간 수만큼 픽셀 배경(tools/make_bg_px.py)을 쓴다
 
 
-def zone_image(z, px_name, name):
-    """픽셀 배경이 있는 구간은 픽셀 그림, 나머지는 원래 그림"""
-    return render.image(px_name, pixel=True) if z < PX_ZONES else render.image(name)
+def px(name):
+    """픽셀 배경 그림 (tools/make_bg_px.py). 늘려도 번지지 않게 픽셀 그대로 키운다"""
+    return render.image(name, pixel=True)
 
 
 class Background:
     def __init__(self):
-        self.sky = [zone_image(i, f"sky_px_{z['bg']}.png", f"sky_{z['bg']}.png") for i, z in enumerate(ZONES)]
-        self.far = [zone_image(i, f"far_px_{z['bg']}.png", f"far_{z['bg']}.png") for i, z in enumerate(ZONES)]
-        self.mid = [zone_image(i, f"mid_px_{z['bg']}.png", f"mid_{z['bg']}.png") for i, z in enumerate(ZONES)]
-        self.prop_img = [zone_image(i, f"prop_px_{z['prop']}.png", f"prop_{z['prop']}.png") for i, z in enumerate(ZONES)]
-        # 땅·발판: [원래 그림, 픽셀 그림]
-        self.lane_mids = [render.image('lane_mid.png'), render.image('lane_px_mid.png', pixel=True)]
-        self.lane_lefts = [render.image('lane_left.png'), render.image('lane_px_left.png', pixel=True)]
-        self.lane_rights = [render.image('lane_right.png'), render.image('lane_px_right.png', pixel=True)]
-        self.grounds = [render.image('ground_mid.png'), render.image('ground_px.png', pixel=True)]
+        self.sky = [px(f"sky_px_{z['bg']}.png") for z in ZONES]
+        self.far = [px(f"far_px_{z['bg']}.png") for z in ZONES]
+        self.mid = [px(f"mid_px_{z['bg']}.png") for z in ZONES]
+        self.prop_img = [px(f"prop_px_{z['prop']}.png") for z in ZONES]
+        # 땅·발판: 모든 구간이 같은 그림을 구간 색으로 물들여 쓴다
+        self.lane_mid = px('lane_px_mid.png')
+        self.lane_left = px('lane_px_left.png')
+        self.lane_right = px('lane_px_right.png')
+        self.ground = px('ground_px.png')
         self.moon = render.image('moon.png')
         self.fog = render.image('fog.png')
         self.shafts = render.image('shafts.png')
@@ -120,15 +119,15 @@ class Background:
                 if not camera.visible(x1, x2):
                     continue
                 if i == 0:
-                    self.draw_strip(self.grounds, x1, x2, ly - 78, 128)
+                    self.draw_strip(self.ground, x1, x2, ly - 78, 128)
                 else:
-                    self.draw_strip(self.lane_mids, x1, x2, ly - 28, 128)
+                    self.draw_strip(self.lane_mid, x1, x2, ly - 28, 128)
                     sx, _ = camera.to_screen(x1, 0)
-                    img = self.lane_lefts[zone_of(x1) < PX_ZONES]
+                    img = self.lane_left
                     render.tint(img, zone_color(x1, 'rim'))
                     img.draw_to_origin(sx - 18, ly - 28)
                     sx, _ = camera.to_screen(x2, 0)
-                    img = self.lane_rights[zone_of(x2) < PX_ZONES]
+                    img = self.lane_right
                     render.tint(img, zone_color(x2, 'rim'))
                     img.draw_to_origin(sx - 6, ly - 28)
             for ax, _, z in map_data.anchors[i]:
@@ -139,13 +138,12 @@ class Background:
                 sx, sy = camera.to_screen(ax, ly)
                 img.draw(sx, sy + img.h / 2 - 1)
 
-    def draw_strip(self, imgs, x1, x2, y, tw):
-        """imgs: [원래 그림, 픽셀 그림]. 타일마다 구간을 보고 고른다."""
+    def draw_strip(self, img, x1, x2, y, tw):
+        """img 를 tw 폭 타일로 x1~x2 에 깐다. 타일마다 그 자리 구간 색으로 물들인다."""
         x = x1 + max(0, int((camera.x - tw - x1) // tw)) * tw
         end = min(x2, camera.x + SCREEN_W + tw)
         while x < end:
             w = min(tw, x2 - x)
-            img = imgs[zone_of(x + w / 2) < PX_ZONES]
             render.tint(img, zone_color(x + w / 2, 'rim'))
             sx, sy = camera.to_screen(x, y)
             if w >= tw:
