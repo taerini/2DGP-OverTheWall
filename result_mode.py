@@ -66,7 +66,7 @@ def draw():
     if win:
         title, sub, col = '적 요새 함락', '거인의 근원을 끊어냈다', (240, 214, 150)
     elif reason == 'dead':
-        title, sub, col = '쓰러졌다', '다시 일어나지 못했다', (226, 120, 104)
+        title, sub, col = '임무 실패', '', (226, 120, 104)
     else:
         title, sub, col = '벽이 무너졌다', '거인이 벽 안으로 쏟아져 들어온다', (226, 120, 104)
     render.text(title, cx, 470, 66, col, 'center', FONT_TITLE, fade(0.2, 1.0))   # 66 = 갈무리11 굵게 6배
