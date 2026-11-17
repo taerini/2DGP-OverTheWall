@@ -10,6 +10,7 @@ import game_world
 import map_data
 import render
 import result_mode
+import sound
 import title_mode
 import upgrade
 import upgrade_mode
@@ -69,6 +70,7 @@ def on_giant_killed(g):
 def neck_juice(g, dmg, killed, face, big=True):
     """목덜미를 벴을 때의 타격감: 일섬, 큰 궤적, 핏빛 불꽃, 큰 숫자, 멈칫, 흔들림, 번쩍임"""
     global hitstop, flash_t
+    sound.sfx('slash_crit')
     nx, ny = g.nape()
     s = 1.0 if big else 0.55
     effect.add(effect.Streak(nx, ny, -0.6 * face, (280 + g.size * 0.25) * s, 22 * s))
@@ -356,6 +358,7 @@ def update_intro(dt):
     wall.gate_open = max(0.0, min(1.0, (intro_t - g0) / (g1 - g0)))
     if was <= 0 < wall.gate_open:
         camera.shake(g1 - g0, 2.5)                     # 쇠창살이 올라가는 동안 땅이 웅웅 울린다
+        sound.sfx('gate_open')
     if intro_t >= INTRO_WALK:
         player.auto_x = INTRO_WALK_TO
     background.update(dt)

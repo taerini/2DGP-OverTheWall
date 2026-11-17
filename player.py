@@ -5,6 +5,7 @@ import effect
 import map_data
 import play_mode
 import render
+import sound
 from config import *
 from giant import floor_of
 from state_machine import StateMachine, wire_fire, arrive, fall, land, tornado
@@ -287,6 +288,7 @@ class Player:
         if target is None:
             return
         self.use_gas(WIRE_COST)
+        sound.sfx('wire')
         self.state_machine.handle_event(('WIRE', target))
 
     def slash(self):
@@ -313,6 +315,7 @@ class Player:
         low = best is not None and best[1] == 'ankle'
         self.action, self.action_t = ('W' if low else 'Q'), Q_TIME
         self.anim_t = 0.0
+        sound.sfx('slash')
         if low:
             effect.add(effect.Slash(self, 'W', self.face, 90, 8))
         else:
@@ -356,6 +359,7 @@ class Player:
         self.hit_t = 0.45
         self.action = None
         camera.shake(0.25)
+        sound.sfx('player_hurt')
         d = 1 if self.x >= src_x else -1
         self.vx, self.vy = d * 330.0, 380.0
         if self.hp <= 0:              # 마지막 한 방: 더 세게 뒤로 튕겨 나간다

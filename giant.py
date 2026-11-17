@@ -8,6 +8,7 @@ import game_world
 import map_data
 import play_mode
 import render
+import sound
 from config import *
 from projectile import Rock, Seed
 
@@ -330,6 +331,7 @@ class Giant:
         self.dir = 1 if p.x > self.x else -1
         self.melon_floor = max(1, min(4, p.floor()))
         self.state, self.state_t = 'inhale', MELON_INHALE
+        sound.sfx_at('melon_inhale', self.x)
         self.seeds_left = MELON_SEEDS
         return True
 
@@ -337,6 +339,7 @@ class Giant:
         if self.state == 'inhale':
             if self.state_t <= 0:
                 self.state, self.state_t = 'spit', MELON_SPIT
+                sound.sfx_at('melon_blow', self.x)
                 camera.shake(0.15, 5)
                 # 처음 내뿜는 순간: 입 앞으로 바람 덩어리가 한꺼번에 확 나온다 (큰 것 조금, 작은 것 여럿)
                 mx, my = self.mouth()
@@ -449,6 +452,7 @@ class Giant:
         nx, ny = self.nape()
         effect.steam(nx, ny, 8, self.size * 0.3, (245, 245, 245), self.size * 0.4)
         camera.shake(0.06 * self.k)
+        sound.sfx_at('giant_death', self.x)
         if self.kind == 'colossal':
             self.explode(300)
         play_mode.on_giant_killed(self)
@@ -582,6 +586,7 @@ class Giant:
         if self.state == 'lunge_warn':
             if self.state_t <= 0:
                 self.state, self.state_t = 'lunge', LUNGE_TIME
+                sound.sfx_at('giant_attack', self.x)
                 effect.steam(self.x, self.y + 4, 2 + self.k, self.size * 0.1, (170, 160, 150), 14 + 5 * self.k)
             return
         if self.state == 'lunge':
@@ -721,6 +726,7 @@ class Giant:
         if self.player_in_grab_zone(GRAB_START):
             self.state, self.state_t = 'grab', GRAB_TIME
             self.grabbed = False
+            sound.sfx_at('giant_attack', self.x)
 
     def swat_r(self):
         """목 뒤 후려치기가 닿는 반지름 (목덜미 중심)"""

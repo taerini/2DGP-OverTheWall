@@ -11,6 +11,8 @@ ANCHOR_LOW = 30              # 가장 낮게. 이 사이에서 클릭한 높이�
 GRAVITY = 1500.0
 
 BGM_VOLUME = 80               # 배경 음악 크기 (0~128)
+# 효과음 크기 (0~128). 여기 없는 소리는 default
+SFX_VOLUME = {'default': 100, 'slash': 80, 'wire': 35, 'giant_attack': 90, 'gate_open': 110}
 
 # 시연용: n 번째 카드 고르기에 반드시 나오는 카드 (upgrade.UPGRADES 의 이름). 비우면 모두 무작위
 DEMO_CARDS = ['회오리 베기 (W)', '동료: 리바이']
