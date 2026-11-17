@@ -434,10 +434,6 @@ class Player:
                                        rad * self.face, flip, sx, sy + (CELL / 2 - BASE) * DRAW / CELL, DRAW, DRAW)
         self.image.opacify(1.0)
 
-        # 머리 위 작은 가스 바 (와이어에만 쓰인다)
-        k = self.gas / self.gas_max
-        render.rect(sx - 14, sy + 46, sx + 14, sy + 49, (10, 10, 14), 160)
-        col = (150, 220, 255) if k > 0.25 else (255, 120, 90)
-        render.rect(sx - 14, sy + 46, sx - 14 + 28 * k, sy + 49, col, 230)
+        # 생명·가스는 왼쪽 위 HUD 에만 보인다 (머리 위 막대는 없앴다)
         if self.no_gas_t > 0:
             render.text('가스 부족', sx, sy + 62, 14, (255, 140, 110), 'center', alpha=min(1.0, self.no_gas_t * 2))
