@@ -6,20 +6,25 @@ import render
 import upgrade
 from config import *
 
-CARD_W, CARD_H = 280, 300
-U = 4                    # 카드 픽셀 크기
+CARD_W, CARD_H = 240, 300
+CARD_GAP = 28
+ICON_U = 6               # 아이콘 한 칸 크기 (8칸 → 48px)
 
-# 카드 종류: 이름에 들어간 말로 고른다 → (종류 색, 아이콘)
+# 카드 종류: 이름에 들어간 말로 고른다 → (분류 이름, 종류 색, 아이콘)
 KINDS = [
-    (('칼날',), (214, 74, 66), 'sword'),
-    (('가스',), (96, 170, 230), 'gas'),
-    (('와이어',), (110, 200, 200), 'hook'),
-    (('동료',), (110, 170, 96), 'ally'),
-    (('대포',), (226, 150, 70), 'cannon'),
-    (('벽',), (160, 160, 168), 'wall'),
-    (('회오리',), (176, 130, 236), 'swirl'),
-    (('붕대',), (232, 110, 140), 'heart'),
+    (('칼날',), '공격', (232, 96, 84), 'sword'),
+    (('회오리',), '공격', (186, 146, 246), 'swirl'),
+    (('가스',), '기동', (110, 184, 240), 'gas'),
+    (('와이어',), '기동', (110, 210, 200), 'hook'),
+    (('동료',), '동료', (130, 196, 110), 'ally'),
+    (('대포',), '지원', (236, 164, 84), 'cannon'),
+    (('벽',), '방어', (176, 176, 186), 'wall'),
+    (('붕대',), '회복', (240, 124, 152), 'heart'),
 ]
+CARD_BODY = (16, 17, 22)         # 반투명 몸통
+CARD_LINE = (200, 202, 212)      # 얇은 테두리 (흐리게)
+TEXT_MAIN = (246, 244, 238)
+TEXT_SUB = (176, 178, 184)
 ICON_COLORS = {'K': (20, 18, 24), 'W': (245, 242, 232), 'Y': (230, 190, 80), 'B': (120, 190, 240),
                'G': (110, 170, 96), 'R': (226, 66, 66), 'P': (190, 140, 255), 'O': (226, 150, 70),
                'S': (160, 160, 168), 'D': (90, 90, 100), 'M': (138, 140, 150)}
@@ -36,10 +41,18 @@ ICONS = {   # 8×8 픽셀 아이콘
 
 
 def kind_of(name):
-    for words, col, icon in KINDS:
+    for words, label, col, icon in KINDS:
         if any(w in name for w in words):
-            return col, icon
-    return (200, 200, 200), 'sword'
+            return label, col, icon
+    return '강화', (200, 200, 200), 'sword'
+
+
+def outline(l, b, r, tp, col, a, w=1):
+    """속이 빈 사각형 테두리"""
+    render.rect(l, tp - w, r, tp, col, a)
+    render.rect(l, b, r, b + w, col, a)
+    render.rect(l, b, l + w, tp, col, a)
+    render.rect(r - w, b, r, tp, col, a)
 
 
 choices = []
@@ -48,7 +61,7 @@ t = 0.0
 
 
 def card_rect(i):
-    x = SCREEN_W / 2 + (i - 1) * (CARD_W + 30) - CARD_W / 2
+    x = SCREEN_W / 2 + (i - 1) * (CARD_W + CARD_GAP) - CARD_W / 2
     y = SCREEN_H / 2 - CARD_H / 2 - 20
     return x, y, x + CARD_W, y + CARD_H
 
@@ -121,38 +134,42 @@ def draw_card(i, name, desc):
     l, b, r, tp = card_rect(i)
     hot = i == hover
     pop = min(1.0, max(0.0, (t - i * 0.06) / 0.18))          # 차례로 아래에서 솟아오른다
-    lift = (8 if hot else 0) - (1 - pop) * 40
+    lift = (6 if hot else 0) - (1 - pop) * 30
     b, tp = b + lift, tp + lift
-    col, icon = kind_of(name)
-    accent = render.shade(col, 40) if hot else col
-    render.pixel_frame(l, b, r, tp, (30, 28, 38) if not hot else (38, 36, 50), accent, U, 255 * pop)
-    # 위쪽 이름 띠 (종류 색)
-    render.rect(l + 4 * U, tp - 16 * U, r - 4 * U, tp - 4 * U, render.shade(col, -40), 255 * pop)
-    render.rect(l + 4 * U, tp - 5 * U, r - 4 * U, tp - 4 * U, render.shade(col, 10), 255 * pop)
-    render.text(name, (l + r) / 2, tp - 10 * U, 21, (250, 248, 240), 'center', alpha=pop)
-    # 가운데 아이콘 (검은 받침 위)
-    cx, cy = (l + r) / 2, tp - 32 * U
-    render.rect(cx - 9 * U, cy - 9 * U, cx + 9 * U, cy + 9 * U, (14, 12, 18), 255 * pop)
-    render.rect(cx - 8 * U, cy - 8 * U, cx + 8 * U, cy + 8 * U, (22, 20, 30), 255 * pop)
+    a = 255 * pop
+    label, col, icon = kind_of(name)
+    cx = (l + r) / 2
+    # 몸통: 반투명 판 + 1px 테두리. 마우스를 올리면 종류 색 테두리
+    render.rect(l, b, r, tp, render.shade(CARD_BODY, 8) if hot else CARD_BODY, 242 * pop)
+    if hot:
+        outline(l, b, r, tp, col, a, 2)
+    else:
+        outline(l, b, r, tp, CARD_LINE, 60 * pop)
+    # 위: 분류(종류 색)와 보유 수
+    render.text(label, l + 18, tp - 24, 13, col, 'left', alpha=pop, shadow=False)
+    n = upgrade.taken.get(name, 0)
+    if n:
+        render.text(f'보유 {n}', r - 18, tp - 24, 13, TEXT_SUB, 'right', alpha=pop, shadow=False)
+    # 아이콘: 받침 없이, 종류 색 옅은 바탕 위에
+    cy = tp - 92
+    render.rect(cx - 38, cy - 38, cx + 38, cy + 38, col, 28 * pop)
     bob = 2 if hot and int(t * 4) % 2 else 0
-    render.pixel_map(ICONS[icon], cx - 4 * 2 * U, cy - 4 * 2 * U + bob, 2 * U,
-                     ICON_COLORS, 255 * pop)
+    render.pixel_map(ICONS[icon], cx - 4 * ICON_U, cy - 4 * ICON_U + bob, ICON_U, ICON_COLORS, a)
+    # 이름과 짧은 구분선
+    render.text(name, cx, tp - 156, 20, TEXT_MAIN, 'center', alpha=pop, shadow=False)
+    render.rect(cx - 14, tp - 176, cx + 14, tp - 174, col, 200 * pop)
     # 설명 (세 줄까지)
     words, lines, cur = desc.split(' '), [], ''
     for w in words:
-        if len(cur) + len(w) > 14 and cur:
+        if len(cur) + len(w) > 13 and cur:
             lines.append(cur)
             cur = w
         else:
             cur = (cur + ' ' + w).strip()
     lines.append(cur)
     for k, s in enumerate(lines[:3]):
-        render.text(s, (l + r) / 2, b + 30 * U - k * 22 - 22, 15, (214, 214, 206), 'center', alpha=pop)
-    # 아래 왼쪽 숫자 키, 아래 오른쪽 보유 수
-    kx, ky = l + 5 * U, b + 5 * U
-    render.rect(kx, ky, kx + 9 * 2, ky + 11 * 2, (14, 12, 18), 255 * pop)
-    render.rect(kx + 2, ky + 2, kx + 16, ky + 20, render.shade(col, 30), 255 * pop)
-    render.pixel_glyph(str(i + 1), kx + 4, ky + 4, 2, (20, 18, 24), 255 * pop)
-    n = upgrade.taken.get(name, 0)
-    if n:
-        render.text(f'보유 {n}', r - 6 * U, b + 9 * U, 13, (180, 180, 180), 'right', alpha=pop)
+        render.text(s, cx, tp - 198 - k * 20, 14, TEXT_SUB, 'center', alpha=pop, shadow=False)
+    # 아래 가운데 숫자 키: 얇은 테두리만
+    kx, ky = cx - 11, b + 12
+    outline(kx, ky, kx + 22, ky + 24, col if hot else CARD_LINE, (200 if hot else 90) * pop)
+    render.pixel_glyph(str(i + 1), kx + 6, ky + 5, 2, col if hot else TEXT_SUB, a)
