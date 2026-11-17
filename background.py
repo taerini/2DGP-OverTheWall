@@ -8,24 +8,30 @@ import render
 from config import *
 
 FAR_P, MID_P, FOG_P = 0.12, 0.4, 0.65
-BG_W = 1600
+PX_ZONES = 2                 # 앞에서부터 이 구간 수만큼 픽셀 배경(tools/make_bg_px.py)을 쓴다
+
+
+def zone_image(z, px_name, name):
+    """픽셀 배경이 있는 구간은 픽셀 그림, 나머지는 원래 그림"""
+    return render.image(px_name, pixel=True) if z < PX_ZONES else render.image(name)
 
 
 class Background:
     def __init__(self):
-        self.sky = [render.image(f"sky_{z['bg']}.png") for z in ZONES]
-        self.far = [render.image(f"far_{z['bg']}.png") for z in ZONES]
-        self.mid = [render.image(f"mid_{z['bg']}.png") for z in ZONES]
+        self.sky = [zone_image(i, f"sky_px_{z['bg']}.png", f"sky_{z['bg']}.png") for i, z in enumerate(ZONES)]
+        self.far = [zone_image(i, f"far_px_{z['bg']}.png", f"far_{z['bg']}.png") for i, z in enumerate(ZONES)]
+        self.mid = [zone_image(i, f"mid_px_{z['bg']}.png", f"mid_{z['bg']}.png") for i, z in enumerate(ZONES)]
+        self.prop_img = [zone_image(i, f"prop_px_{z['prop']}.png", f"prop_{z['prop']}.png") for i, z in enumerate(ZONES)]
+        # 땅·발판: [원래 그림, 픽셀 그림]
+        self.lane_mids = [render.image('lane_mid.png'), render.image('lane_px_mid.png', pixel=True)]
+        self.lane_lefts = [render.image('lane_left.png'), render.image('lane_px_left.png', pixel=True)]
+        self.lane_rights = [render.image('lane_right.png'), render.image('lane_px_right.png', pixel=True)]
+        self.grounds = [render.image('ground_mid.png'), render.image('ground_px.png', pixel=True)]
         self.moon = render.image('moon.png')
         self.fog = render.image('fog.png')
         self.shafts = render.image('shafts.png')
         self.vignette = render.image('vignette.png')
         self.dot = render.image('dot.png')
-        self.lane_mid = render.image('lane_mid.png')
-        self.lane_left = render.image('lane_left.png')
-        self.lane_right = render.image('lane_right.png')
-        self.ground = render.image('ground_mid.png')
-        self.props = {ZONES[z]['prop']: render.image(f"prop_{ZONES[z]['prop']}.png") for z in range(ZONE_COUNT)}
         self.time = 0.0
         self.particles = [self.new_particle(True) for _ in range(70)]
 
@@ -72,11 +78,11 @@ class Background:
         if alpha <= 0.01:
             return
         img.opacify(alpha)
-        off = -(camera.x * parallax) % BG_W
-        sx = off - BG_W
+        off = -(camera.x * parallax) % img.w
+        sx = off - img.w
         while sx < SCREEN_W:
             img.draw_to_origin(sx, y)
-            sx += BG_W
+            sx += img.w
 
     def draw_back(self):
         cx = camera.x + SCREEN_W / 2
@@ -114,28 +120,32 @@ class Background:
                 if not camera.visible(x1, x2):
                     continue
                 if i == 0:
-                    self.draw_strip(self.ground, x1, x2, ly - 78, 128)
+                    self.draw_strip(self.grounds, x1, x2, ly - 78, 128)
                 else:
-                    self.draw_strip(self.lane_mid, x1, x2, ly - 28, 128)
+                    self.draw_strip(self.lane_mids, x1, x2, ly - 28, 128)
                     sx, _ = camera.to_screen(x1, 0)
-                    render.tint(self.lane_left, zone_color(x1, 'rim'))
-                    self.lane_left.draw_to_origin(sx - 18, ly - 28)
+                    img = self.lane_lefts[zone_of(x1) < PX_ZONES]
+                    render.tint(img, zone_color(x1, 'rim'))
+                    img.draw_to_origin(sx - 18, ly - 28)
                     sx, _ = camera.to_screen(x2, 0)
-                    render.tint(self.lane_right, zone_color(x2, 'rim'))
-                    self.lane_right.draw_to_origin(sx - 6, ly - 28)
+                    img = self.lane_rights[zone_of(x2) < PX_ZONES]
+                    render.tint(img, zone_color(x2, 'rim'))
+                    img.draw_to_origin(sx - 6, ly - 28)
             for ax, _, z in map_data.anchors[i]:
                 if not camera.visible(ax - 70, ax + 70):
                     continue
-                img = self.props[ZONES[z]['prop']]
+                img = self.prop_img[z]
                 render.tint(img, zone_color(ax, 'rim'))
                 sx, sy = camera.to_screen(ax, ly)
                 img.draw(sx, sy + img.h / 2 - 1)
 
-    def draw_strip(self, img, x1, x2, y, tw):
+    def draw_strip(self, imgs, x1, x2, y, tw):
+        """imgs: [원래 그림, 픽셀 그림]. 타일마다 구간을 보고 고른다."""
         x = x1 + max(0, int((camera.x - tw - x1) // tw)) * tw
         end = min(x2, camera.x + SCREEN_W + tw)
         while x < end:
             w = min(tw, x2 - x)
+            img = imgs[zone_of(x + w / 2) < PX_ZONES]
             render.tint(img, zone_color(x + w / 2, 'rim'))
             sx, sy = camera.to_screen(x, y)
             if w >= tw:

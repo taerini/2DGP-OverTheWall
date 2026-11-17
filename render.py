@@ -19,11 +19,16 @@ def setup():
     SDL_SetRenderDrawBlendMode(p2.renderer, SDL_BLENDMODE_BLEND)
 
 
-def image(name):
-    """같은 그림을 여러 번 불러오지 않도록 모아 둔다."""
+def image(name, pixel=False):
+    """같은 그림을 여러 번 불러오지 않도록 모아 둔다.
+    pixel=True 면 크게 늘려도 번지지 않게 픽셀을 그대로 키운다 (픽셀 그림 시트용)."""
     img = _images.get(name)
     if img is None:
+        if pixel:
+            SDL_SetHint(b'SDL_RENDER_SCALE_QUALITY', b'0')
         img = load_image('resource/' + name)
+        if pixel:
+            SDL_SetHint(b'SDL_RENDER_SCALE_QUALITY', b'1')
         _images[name] = img
     return img
 
