@@ -12,6 +12,7 @@ BASE = 8                    # 칸 아래에서 발바닥까지 (64칸·96칸 시
 
 SPEED = 520.0
 ALLY_HP = 6
+BIG_RATE = 0.15          # 큰 거인(크기 3 이상)에게 주는 피해 비율: 막타는 주인공 몫
 SWAT_RATE = 0.2          # 서 있는 거인을 벨 때 손에 맞을 확률 (무릎 꿇은 거인은 반격하지 못한다)
 REGEN_DELAY = 4.0        # 이만큼 안 맞으면
 REGEN_TIME = 6.0         # 이 간격으로 체력 1 회복
@@ -111,7 +112,7 @@ class Ally:
         p = play_mode.player
         best, best_d = None, limit
         for g in play_mode.giants():
-            if g.alive() and g.lane is not None:
+            if g.alive() and g.lane is not None and not g.boss:     # 보스는 주인공 몫
                 d = abs(g.x - p.x)
                 if d < best_d:
                     best, best_d = g, d
@@ -202,6 +203,7 @@ class Levi(Ally):
     def __init__(self, index):
         super().__init__(index)
         self.target = None
+        self.mode = 'neck'
         self.cd = 1.0
 
     def update(self, dt):
@@ -210,19 +212,39 @@ class Levi(Ally):
             return
         if self.target is None or not self.target.alive():
             self.target = self.nearest_giant(480)
+            self.pick_mode()
         if self.target is None:
             self.idle(dt)
             return
-        nx, ny = self.target.nape()
-        self.fly_to(nx - self.target.dir * 14, ny - 10, dt)
-        if self.cd <= 0 and math.hypot(nx - self.x, ny - self.y - 18) < self.target.reach_x():
-            dealt, killed = self.target.hit('neck', ATTACK * self.POWER * play_mode.player.blade)
+        g = self.target
+        if self.mode == 'ankle':
+            # 큰 거인: 발목을 베어 주저앉혀 주인공에게 기회를 만든다
+            ax, ay = g.x - g.dir * 10, g.y + 6
+            self.fly_to(ax, ay, dt)
+            if self.cd <= 0 and math.hypot(ax - self.x, ay - self.y) < g.reach_x():
+                g.hit('ankle', ATTACK * self.POWER * BIG_RATE * play_mode.player.blade)
+                self.after_slash(g)
+            return
+        nx, ny = g.nape()
+        self.fly_to(nx - g.dir * 14, ny - 10, dt)
+        if self.cd <= 0 and math.hypot(nx - self.x, ny - self.y - 18) < g.reach_x():
+            rate = 1.0 if g.k <= 2 else BIG_RATE
+            dealt, killed = g.hit('neck', ATTACK * self.POWER * rate * play_mode.player.blade)
             if dealt > 0:
-                play_mode.neck_juice(self.target, dealt, killed, self.face, big=False)
-            effect.add(effect.Slash(self, 'Q', self.face, 60, 22))
-            self.cd = self.COOLDOWN
-            self.slash_t = 0.26
-            self.counter(self.target)
+                play_mode.neck_juice(g, dealt, killed, self.face, big=False)
+            self.after_slash(g)
+
+    def pick_mode(self):
+        """작은 거인은 목덜미, 큰 거인은 반쯤은 발목 (이미 주저앉았으면 목덜미)"""
+        g = self.target
+        self.mode = 'ankle' if g and g.k >= 3 and g.kneel_t <= 0 and random.random() < 0.5 else 'neck'
+
+    def after_slash(self, g):
+        effect.add(effect.Slash(self, 'Q', self.face, 60, 22))
+        self.cd = self.COOLDOWN
+        self.slash_t = 0.26
+        self.counter(g)
+        self.pick_mode()
 
 
 class Armin(Levi):
@@ -288,12 +310,13 @@ class Mikasa(Ally):
         for g in play_mode.giants():
             if len(hit) >= self.MAX_HITS:
                 break
-            if not g.alive() or g in hit:
+            if not g.alive() or g in hit or g.boss:     # 보스는 주인공 몫
                 continue
             nx, ny = g.nape()
             if abs(nx - self.x) < g.reach_x() and abs(ny - (self.y + 18)) < 70:
                 hit.append(g)
-                dealt, killed = g.hit('neck', ATTACK * 0.7 * play_mode.player.blade)
+                rate = 1.0 if g.k <= 2 else BIG_RATE
+                dealt, killed = g.hit('neck', ATTACK * 0.7 * rate * play_mode.player.blade)
                 if dealt > 0:
                     play_mode.neck_juice(g, dealt, killed, self.face, big=False)
                 effect.add(effect.Slash(self, 'Q', self.face, 64, 22))
