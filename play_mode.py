@@ -228,7 +228,7 @@ def update_spawns(dt):
     z = zone_of(player.x)
     if z not in visited:
         visited.add(z)
-        hud.show_banner(f'{z + 1}. {ZONES[z]["name"]}', ZONES[z]['story'])
+        hud.show_banner(ZONES[z]['name'])
     # 구간 보스: 들어가자마자 요새에서 나오거나, boss_at 만큼 들어가면 화면 오른쪽 바깥에서 나온다
     info = ZONES[z]
     boss = info.get('boss')
