@@ -11,8 +11,11 @@ shake_amp = 5.0
 shake_dx, shake_dy = 0.0, 0.0
 
 
+MIN_X = -260.0          # 왼쪽 끝: 우리 벽이 화면 왼쪽에 넓게 보이게 맵 밖까지 조금 더 보여 준다
+
+
 def clamp_x(v):
-    return max(0.0, min(MAP_W - SCREEN_W, v))
+    return max(MIN_X, min(MAP_W - SCREEN_W, v))
 
 
 def reset(tx):
