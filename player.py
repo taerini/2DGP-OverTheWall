@@ -11,7 +11,7 @@ from state_machine import StateMachine, wire_fire, arrive, fall, land, tornado
 
 CELL, BASE = 96, 8
 DRAW = 72                    # 화면에 그리는 칸 크기 (96칸을 줄여 키를 약 48px 로 맞춤)
-ROWS = ['idle', 'run', 'wire', 'air', 'slashQ', 'slashW', 'spinE', 'hit']
+ROWS = ['idle', 'run', 'wire', 'air', 'slashQ', 'slashW', 'spinE', 'hit', 'death']
 FRAMES = {row: 8 for row in ROWS}   # PixelLab 주인공 시트(hero_px.png): 줄마다 8프레임. air 는 0~3 상승, 4~7 하강
 
 WALK_SPEED = 130.0
@@ -32,6 +32,8 @@ TORNADO_RISE = 0.4
 FORT_DAMAGE = 6.0            # 혼자 요새를 베면 오래 걸린다
 PART_ORDER = {'neck': 0, 'ankle': 1, 'body': 2}
 AIR_NECK_V = 75.0           # 공중에서 목덜미와 이만큼 높이 차이 안이면 목을 벤다
+DEATH_KNOCK = (360.0, 460.0)  # 쓰러질 때 뒤로 튕겨 나가는 속도 (가로, 위)
+DEATH_ANIM = 0.9            # 쓰러지는 모션(death 줄 8장) 시간. 끝나면 마지막 장(누운 자세) 그대로
 
 
 class Ground:
@@ -50,6 +52,19 @@ class Ground:
     def do(self, dt):
         # 달리기는 가스를 쓰지 않는다. 땅에 있으면 가스가 천천히 찬다.
         p = self.p
+        if p.auto_x is not None:     # 시작 장면: 성문에서 걸어 나온다
+            dx = p.auto_x - p.x
+            p.vx = math.copysign(min(RUN_MAX * 0.8, abs(dx) * 4), dx) if abs(dx) > 4 else 0.0   # 성벽 속에서 달려 나온다
+            if abs(p.vx) > 20:
+                p.face = 1 if p.vx > 0 else -1
+            p.x += p.vx * dt                  # 성문(벽 안쪽)에서 나오므로 벽 경계에 막히지 않게 직접 옮긴다
+            return
+        if p.dead:                   # 쓰러졌으면 조작 없이 미끄러지다 멈춘다
+            p.vx = math.copysign(max(0.0, abs(p.vx) - 1400 * dt), p.vx)
+            p.move_x(p.vx * dt)
+            if not map_data.segment_at(p.lane, p.x):
+                p.state_machine.handle_event(('FALL', None))
+            return
         mx, _ = camera.to_world(*p.mouse)
         dx = mx - p.x
         target = 0.0
@@ -136,7 +151,7 @@ class Air:
         p = self.p
         mx, _ = camera.to_world(*p.mouse)
         target = max(-260.0, min(260.0, (mx - p.x) * 1.5))
-        if p.hit_t <= 0:
+        if p.hit_t <= 0 and not p.dead:
             p.vx += max(-420 * dt, min(420 * dt, target - p.vx))
         p.vy = max(-900.0, p.vy - GRAVITY * dt)
         p.move_x(p.vx * dt)
@@ -205,11 +220,14 @@ class Player:
         self.preview = None
         self.land_speed = 0.0
         self.anim_t = 0.0
+        self.hidden = False           # 시작 장면: 성문이 열리기 전에는 보이지 않는다
+        self.auto_x = None            # 시작 장면: 마우스 대신 이 x 를 향해 걷는다
 
         # 강화로 바뀌는 값
         self.max_hp = START_HP
         self.hp = START_HP
         self.dead = False             # 생명은 하나뿐: 체력이 다하면 그대로 끝
+        self.death_t = 0.0            # 쓰러진 뒤 지난 시간
         self.safe_t = 0.0             # 마지막으로 맞은 뒤 지난 시간 (체력이 다시 차는 조건)
         self.gas_max = GAS_MAX
         self.gas = GAS_MAX
@@ -340,7 +358,9 @@ class Player:
         camera.shake(0.25)
         d = 1 if self.x >= src_x else -1
         self.vx, self.vy = d * 330.0, 380.0
-        self.face = -d
+        if self.hp <= 0:              # 마지막 한 방: 더 세게 뒤로 튕겨 나간다
+            self.vx, self.vy = d * DEATH_KNOCK[0], DEATH_KNOCK[1]
+        self.face = -d                # 때린 쪽을 본 채 뒤로 넘어간다
         self.state_machine.handle_event(('FALL', None))
         effect.add(effect.PixelNumber(self.x, self.y + 50, f'-{int(dmg)}', (255, 110, 90), 21 + 4 * (n - 1)))
         if self.hp <= 0:
@@ -350,12 +370,16 @@ class Player:
         """생명은 하나뿐이다. 다시 살아나지 않고 쓰러진 채 게임이 끝난다."""
         self.hp = 0
         self.dead = True
+        self.death_t = 0.0
+        self.hook, self.reeling = None, False
         self.invuln = 99.0            # 쓰러진 뒤에는 더 맞지 않는다
         play_mode.on_player_down()
 
     # ------------------------------------------------ 갱신
     def update(self, dt):
         self.anim_t += dt
+        if self.dead:
+            self.death_t += dt
         for k in self.cool:
             self.cool[k] = max(0.0, self.cool[k] - dt)
         self.invuln = max(0.0, self.invuln - dt)
@@ -382,8 +406,8 @@ class Player:
     # ------------------------------------------------ 그리기
     def pick_frame(self):
         st = self.state_machine.cur_state
-        if self.dead:
-            return 'hit', 7, 0.0          # 쓰러진 자세 그대로
+        if self.dead:                     # 뒤로 넘어가는 모션 뒤 누운 자세 그대로
+            return 'death', min(FRAMES['death'] - 1, int(self.death_t / DEATH_ANIM * FRAMES['death'])), 0.0
         if st is self.TORNADO:
             return 'spinE', int(self.anim_t * 30) % 8, 0.0
         if self.hit_t > 0:
@@ -406,6 +430,8 @@ class Player:
         return 'idle', int(self.anim_t * 8) % 8, 0.0
 
     def draw(self):
+        if self.hidden:
+            return
         cx, cy = self.center()
         # 와이어 줄
         if self.hook:

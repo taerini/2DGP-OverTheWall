@@ -1,4 +1,4 @@
-"""PixelLab 주인공·동료 시트 합치기 (96×96 칸, 줄 8개, 줄마다 8프레임, 오른쪽을 봄).
+"""PixelLab 주인공·동료 시트 합치기 (96×96 칸, 주인공 줄 9개 · 동료 줄 8개, 줄마다 8프레임, 오른쪽을 봄).
 
 PixelLab 에서 만든 캐릭터(오른쪽 방향) 프레임을 resource/<이름>_src/ 에 받아 두고,
 줄마다 프레임을 골라 한 장으로 붙인다. 그림 자체는 고치지 않는다.
@@ -38,6 +38,7 @@ CHARS = {
         ('slashW', 'slashW',        ALL8),
         ('spinE',  'spin_attack',   [1, 2, 3, 4, 5, 6, 7, 1]),         # 0번은 서 있는 자세라 빼고 회전만 반복
         ('hit',    'hit_knockback', ALL8),
+        ('death',  'death',         [1, 2, 3, 4, 5, 5, 6, 6], 'ground'),   # 템플릿 falling-back-death (7장). 0번은 서 있는 자세라 뺀다
     ]),
     # 동료는 날기(wire)·베기(slashQ)·공중(air) 만 쓴다. 나머지 줄은 서 있는 모습으로 채운다
     'ally_red': dict(src='ally_red_src', out='ally_red_px', rows=[
@@ -76,7 +77,11 @@ def build(c):
         for col, i in enumerate(picks):
             im = frame(c['src'], folder, i)
             x = col * CELL + (CELL - im.width) // 2
-            y = r * CELL + CELL - BASE - (foot[0] if foot else FOOT[im.height])
+            if foot and foot[0] == 'ground':
+                feet = im.getbbox()[3]          # 넘어지며 몸이 뜨는 장도 그림 맨 아래를 바닥에 붙인다
+            else:
+                feet = foot[0] if foot else FOOT[im.height]
+            y = r * CELL + CELL - BASE - feet
             sheet.alpha_composite(im, (x, y))
     sheet.save(os.path.join(OUT, c['out'] + '.png'))
     meta = {'cell': [CELL, CELL], 'base': BASE, 'rows': [[row[0], 8] for row in rows]}
