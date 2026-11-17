@@ -68,10 +68,9 @@ class Ally:
         self.safe_t = 0.0
         d = 1 if self.x >= src_x else -1
         self.vx, self.vy = d * 380.0, 260.0
-        effect.add(effect.FloatText(self.x, self.y + 60, f'-{n}', (255, 130, 110), 15))
+        effect.add(effect.PixelNumber(self.x, self.y + 60, f'-{n}', (255, 130, 110), 17))
         if self.hp <= 0:
             self.down_t = DOWN_TIME
-            effect.add(effect.FloatText(self.x, self.y + 74, f'{self.NAME} 후퇴!', (255, 150, 130), 15))
             effect.steam(self.x, self.y + 18, 3, 14, (220, 220, 220), 20)
 
     def counter(self, g):
@@ -97,7 +96,6 @@ class Ally:
             if self.down_t <= 0:
                 self.hp = self.max_hp
                 self.invuln = 1.5
-                effect.add(effect.FloatText(self.x, self.y + 60, f'{self.NAME} 복귀', (170, 230, 180), 14))
             return True
         self.safe_t += dt
         if self.safe_t > REGEN_DELAY and self.hp < self.max_hp:

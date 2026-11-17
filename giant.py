@@ -248,17 +248,13 @@ class Giant:
         if part == 'neck':
             if self.armor > 0:
                 effect.add(effect.Spark(nx, ny, (255, 220, 160)))
-                effect.add(effect.FloatText(nx, ny + 20, '튕김! 발목부터 베어 껍질을 깨라', (255, 210, 150), 15))
                 return 0.0, False
             if self.guarding():
                 dmg *= 0.15
-                effect.add(effect.FloatText(nx, ny + 20, '가렸다! 발목부터', (255, 220, 160), 15))
         elif part == 'ankle':
             if self.armor > 0:
                 self.armor -= 1
                 effect.add(effect.Spark(self.x, self.y + 20, (255, 220, 160)))
-                effect.add(effect.FloatText(self.x, self.y + 50,
-                                            '껍질 깨짐' if self.armor == 0 else f'껍질 {self.armor}', (255, 210, 150), 15))
             if self.kneel_t <= 0:
                 self.kneel_age = 0.0
                 camera.shake(0.08 * self.k)
@@ -285,8 +281,7 @@ class Giant:
             hx, hy = self.x, play_mode.player.y + 18
         effect.add(effect.Spark(hx, hy, (255, 120, 100) if part == 'neck' else (255, 240, 230)))
         if part in PART_NAME and part != 'neck':
-            effect.add(effect.FloatText(hx, hy + 24, PART_NAME[part], (230, 230, 230), 13))
-            effect.damage_number(hx, hy + 46, dmg, self.crit, 18)
+            effect.damage_number(hx, hy + 46, dmg, self.crit, 24)
         if self.hp <= 0:
             self.die()
             return dmg, True

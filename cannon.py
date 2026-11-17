@@ -82,11 +82,10 @@ class CartCannon:
             return
         self.hp -= n
         effect.add(effect.Spark(self.x, self.y + 16, (255, 220, 160)))
-        effect.add(effect.FloatText(self.x, self.y + 50, f'-{n}', (255, 150, 110), 14))
+        effect.add(effect.PixelNumber(self.x, self.y + 50, f'-{n}', (255, 150, 110), 17))
         if self.hp <= 0:
             self.rebuild_t = CART_REBUILD
             effect.burst(self.x, self.y + 14, 12, (255, 160, 80), 40, 200)
-            effect.add(effect.FloatText(self.x, self.y + 64, '수레 대포 파괴!', (255, 140, 100), 16))
             if camera.visible(self.x - 50, self.x + 50):
                 camera.shake(0.3)
 

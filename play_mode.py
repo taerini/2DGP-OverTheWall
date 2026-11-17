@@ -73,16 +73,13 @@ def neck_juice(g, dmg, killed, face, big=True):
     effect.add(effect.Streak(nx, ny, -0.6 * face, (280 + g.size * 0.25) * s, 22 * s))
     effect.add(effect.BigArc(nx, ny, (160 + g.size * 0.12) * s, face, -0.25))
     effect.add(effect.Spray(nx, ny, (0.0 if face > 0 else math.pi) - 0.35 * face, int(28 * s)))
-    effect.damage_number(nx + 10 * face, ny + 46, dmg, g.crit, int(30 * s))
+    effect.damage_number(nx + 10 * face, ny + 60, dmg, g.crit, int(35 * s))
     if not big:
         return
-    if g.crit:
-        effect.add(effect.PopText(nx + 10 * face, ny + 80, '치명타!', (255, 180, 60), 18))
     if killed:
         hitstop = max(hitstop, 0.16)
         flash_t = 0.12
         camera.shake(0.32, 11 + g.k)
-        effect.add(effect.PopText(nx, ny + 104, '처치!', (255, 120, 100), 34))
     else:
         hitstop = max(hitstop, 0.075)
         camera.shake(0.16, 7)

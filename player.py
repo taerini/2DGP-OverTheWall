@@ -319,7 +319,6 @@ class Player:
                 if d <= g.reach_x() + 70 and d < best_d:
                     best, best_d = g, d
         if best is None:
-            effect.add(effect.FloatText(self.x, self.y + 56, '근처에 거인이 없다', (220, 220, 220), 14))
             return
         self.cool['W'] = self.tornado_cd
         self.action = None
@@ -339,7 +338,7 @@ class Player:
         self.vx, self.vy = d * 330.0, 380.0
         self.face = -d
         self.state_machine.handle_event(('FALL', None))
-        effect.add(effect.FloatText(self.x, self.y + 50, f'-{n}', (255, 110, 90), 18 + 4 * (n - 1)))
+        effect.add(effect.PixelNumber(self.x, self.y + 50, f'-{int(dmg)}', (255, 110, 90), 21 + 4 * (n - 1)))
         if self.hp <= 0:
             self.die()
 

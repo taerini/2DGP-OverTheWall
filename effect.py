@@ -223,14 +223,30 @@ class Spray:
         render.untint(self.img)
 
 
-class PopText(FloatText):
-    """크게 튀어나왔다가 작아지는 피해 숫자"""
+class PixelNumber:
+    """픽셀 글자 숫자. 처음 잠깐 한 칸 크게 나왔다가 제 크기로 돌아오고, 떠오르며 흐려진다.
+    size 는 글씨 크기 정도. 픽셀 한 칸 크기 u = size / 12 로 정수로 끊는다."""
+    LIFE = 0.9
+
+    def __init__(self, x, y, s, color=(255, 236, 205), size=28, pop=True):
+        self.x, self.y, self.s, self.color, self.size, self.pop = x, y, s, color, size, pop
+        self.t = 0.0
+        self.vx = random.uniform(-20, 20)
+
+    def update(self, dt):
+        self.t += dt
+        self.x += self.vx * dt
+        self.y += 40 * dt * max(0.0, 1 - self.t / 0.5)
+        if self.t > self.LIFE:
+            game_world.remove_object(self)
 
     def draw(self):
-        k = self.t / 0.9
-        pop = 1.6 - 0.6 * min(1.0, self.t / 0.12)
+        k = self.t / self.LIFE
+        u = max(2, round(self.size / 12))
+        if self.pop and self.t < 0.08:
+            u += 1
         sx, sy = camera.to_screen(self.x, self.y)
-        render.text(self.s, sx, sy, int(self.size * pop), self.color, 'center', alpha=1 - k * k)
+        render.pixel_number(self.s, sx, sy, u, self.color, 255 * (1 - max(0.0, k - 0.6) / 0.4))
 
 
 DAMAGE_SHOW = 137    # 피해 숫자를 보여 줄 때만 곱한다 (실제 체력 계산과는 상관없음)
@@ -240,9 +256,9 @@ def damage_number(x, y, dmg, crit, size):
     """튀어나오는 피해 숫자. 치명타는 더 크고 주황빛이다."""
     n = str(int(dmg * DAMAGE_SHOW))
     if crit:
-        add(PopText(x, y, n, (255, 180, 60), int(size * 1.35)))
+        add(PixelNumber(x, y, n, (255, 180, 60), int(size * 1.4)))
     else:
-        add(PopText(x, y, n, (255, 236, 205), size))
+        add(PixelNumber(x, y, n, (255, 236, 205), size))
 
 
 def add(o):
