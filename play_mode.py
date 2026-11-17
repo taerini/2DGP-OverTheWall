@@ -112,7 +112,14 @@ SIZE_WEIGHTS = [
     (40, 34, 21, 5, 0),
     (38, 34, 22, 6, 0),
 ]
-MAX_ALIVE = 22      # 한 번에 살아 있는 일반 거인 수 (길이 다 막히지 않게)
+MAX_ALIVE = 22      # 처음에 한 번에 살아 있는 일반 거인 수 (길이 다 막히지 않게)
+SPAWN_RAMP = 300.0  # 이 시간(초)에 걸쳐 거인이 점점 늘어 처음의 SPAWN_MAX 배가 된다
+SPAWN_MAX = 2.0
+
+
+def spawn_mult():
+    """거인 수 배율: 처음 1배 → SPAWN_RAMP 초 뒤 SPAWN_MAX 배"""
+    return 1 + (SPAWN_MAX - 1) * min(1.0, play_time / SPAWN_RAMP)
 
 
 def spawn(kind, x, k=None, lane=None, zone=None):
@@ -146,14 +153,28 @@ def spawn_boss(kind):
     hud.show_message(f'{g.boss}가 요새에서 나왔다! (크기 {g.k})', 3.0)
 
 
-# 요새에서 나오는 거인 종류. 시간이 지날수록 다양해진다 (종류, 가중치, 나오기 시작하는 시간)
+# 새로 나오는 거인 종류. 시간이 지날수록 다양해진다 (종류, 가중치, 나오기 시작하는 시간)
 FORT_KINDS = [('normal', 40, 0), ('erratic', 20, 0), ('climber', 18, 60), ('swarm', 14, 120), ('armed', 30, 180)]
+
+
+SPAWN_HIDE = 600.0  # 새 거인은 화면 오른쪽 끝에서 이만큼 더 바깥에 만든다 (생기는 모습이 안 보이게)
+
+
+def spawn_x():
+    """새 거인이 나올 자리: 주인공이 있는 구간의 다음 구간 시작점. 화면에 보이면 화면 밖으로 민다.
+    마지막(요새) 구간이면 요새에서 나온다."""
+    z = zone_of(player.x)
+    fort = FORTRESS_X + 40
+    if z >= ZONE_COUNT - 1:
+        return fort
+    x = max((z + 1) * ZONE_W, camera.x + SCREEN_W + SPAWN_HIDE)
+    return min(x, fort)
 
 
 def fort_spawn():
     kinds = [(k, w) for k, w, t in FORT_KINDS if play_time >= t]
     kind = random.choices([k for k, _ in kinds], [w for _, w in kinds])[0]
-    x = FORTRESS_X + 40
+    x = spawn_x()
     # 크기는 요새가 아니라 주인공이 이야기를 얼마나 나아갔는지(들어가 본 가장 먼 구간)를 따른다
     z = progress()
     spawn(kind, x, lane=0, zone=z)
@@ -165,11 +186,12 @@ def fort_spawn():
 def update_spawns(dt):
     alive = sum(1 for g in giants() if g.alive() and not g.boss and not g.waiting)
     near_fort = player.x > FORTRESS_X - 1600
-    # 거인은 적 요새에서만 나온다. 시간이 지날수록, 주인공이 가까울수록 자주
+    # 거인은 주인공이 있는 구간의 다음 구간 시작점(화면 밖)에서 나와 걸어온다. 시간이 지날수록 자주
     spawn_t['fort'] -= dt
     if spawn_t['fort'] <= 0:
-        spawn_t['fort'] = max(2.4, 5.5 - play_time * 0.015) * (0.6 if near_fort else 1.0)
-        if alive < MAX_ALIVE:
+        m = spawn_mult()
+        spawn_t['fort'] = max(2.4, 5.5 - play_time * 0.015) * (0.6 if near_fort else 1.0) / m
+        if alive < MAX_ALIVE * m:
             fort_spawn()
 
     # 구간에 처음 들어가면 이름을 띄우고 보스를 내보낸다
@@ -215,13 +237,15 @@ def init():
     game_world.add_object(player, LAYER_PLAYER)
     camera.reset(player.x)
 
-    # 처음부터 구간마다 그 구간의 거인이 서 있다 (이후로는 요새에서만 나온다).
+    # 처음부터 구간마다 그 구간의 거인이 서 있다 (이후로는 다음 구간 시작점에서 나온다).
     # 주인공이 가까이 올 때까지 제자리에서 기다리므로, 시작하면 첫 구간의 작은 거인부터 만난다
     for x in (1100, 1700, 2400, 3200):
         spawn('normal' if x < 2000 else ZONES[0]['kind'], x, k=1).waiting = True
+    # 뒤 구간일수록 미리 서 있는 거인이 많다 (2구간 3마리 → 마지막 앞 구간 6마리)
     for z in range(1, ZONE_COUNT - 1):
-        for i in range(3):
-            x = z * ZONE_W + (i + 0.5) * ZONE_W / 3 + random.uniform(-300, 300)
+        n = round(3 + 3 * (z - 1) / max(1, ZONE_COUNT - 3))
+        for i in range(n):
+            x = z * ZONE_W + (i + 0.5) * ZONE_W / n + random.uniform(-150, 150)
             spawn(ZONES[z]['kind'], x).waiting = True
 
 
