@@ -184,10 +184,12 @@ FORT_KINDS = [('normal', 40, 0), ('erratic', 20, 0), ('climber', 18, 60), ('swar
 INTRO_PAN = 2.2            # 성벽을 가득 보여 주던 카메라가 오른쪽으로 옮겨 간다
 INTRO_GATE = (2.3, 3.8)    # 성문 쇠창살이 올라간다
 INTRO_WALK = 3.3           # 주인공이 성벽 속에서 달려 나오기 시작 (성문이 2/3쯤 열렸을 때)
-INTRO_START_X = WALL_X - 270   # 주인공 처음 자리: 성벽 속 (벽에 가려 안 보인다)
-INTRO_END = 4.8            # 조작 시작 (클릭하면 건너뛴다)
+INTRO_START_X = WALL_X - 100   # 주인공 처음 자리: 성문 뒤 성벽 속 (벽에 가려 안 보이고, 달려서 나온다)
+INTRO_RUN = 2.4            # 성벽 밖으로 달려 나가는 시간 (멈추지 않고 달리던 그대로 조작을 넘겨받는다)
+INTRO_END = INTRO_WALK + INTRO_RUN   # 조작 시작 (클릭하면 건너뛴다)
 INTRO_CAM_FROM = -1200.0   # 처음 카메라 위치: 성벽이 화면을 가득 채운다
-INTRO_WALK_TO = WALL_X + 150
+INTRO_WALK_TO = WALL_X + 2000  # 달려가는 목표: 시작 장면 안에는 닿지 않을 만큼 멀리 (그래서 줄곧 같은 속도로 달린다)
+INTRO_SKIP_X = WALL_X + 150    # 건너뛰었을 때 주인공 자리
 intro_t = 0.0
 
 SPAWN_HIDE = (600.0, 2000.0)   # 새 거인은 화면 오른쪽 끝에서 이만큼 더 바깥에 만든다 (생기는 모습이 안 보이게)
@@ -274,7 +276,8 @@ def init():
     fortress = Fortress()
     player = Player()
     player.x = INTRO_START_X            # 성벽 속에서 기다리다 문이 열리면 달려 나온다
-    player.hidden, player.auto_x = False, None
+    player.hidden = False
+    player.auto_x = INTRO_START_X       # 문이 열릴 때까지 마우스를 따라가지 않고 성벽 속에 가만히 있는다
     game_world.add_object(wall, LAYER_BUILDING)
     game_world.add_object(fortress, LAYER_BUILDING)
     game_world.add_object(player, LAYER_PLAYER)
@@ -342,9 +345,12 @@ def update_intro(dt):
     """시작 장면: 카메라가 성벽에서 오른쪽으로 → 성문이 열리고 → 주인공이 걸어 나온다"""
     global intro_t
     intro_t += dt
-    k = min(1.0, intro_t / INTRO_PAN)
-    k = k * k * (3 - 2 * k)
-    camera.x = INTRO_CAM_FROM + (camera.MIN_X - INTRO_CAM_FROM) * k
+    if intro_t < INTRO_PAN:
+        k = intro_t / INTRO_PAN
+        k = k * k * (3 - 2 * k)
+        camera.x = INTRO_CAM_FROM + (camera.MIN_X - INTRO_CAM_FROM) * k
+    else:
+        camera.update(player.x, dt)                     # 다 옮겨 간 뒤로는 달려 나가는 주인공을 따라간다
     g0, g1 = INTRO_GATE
     was = wall.gate_open
     wall.gate_open = max(0.0, min(1.0, (intro_t - g0) / (g1 - g0)))
@@ -357,9 +363,9 @@ def update_intro(dt):
     if intro_t >= INTRO_END:                            # 끝 (또는 건너뜀): 문은 활짝, 주인공은 밖으로, 조작 시작
         wall.gate_open = 1.0
         player.hidden, player.auto_x = False, None
-        player.x = max(player.x, INTRO_WALK_TO)
-        player.vx = 0.0
-        player.mouse = camera.to_screen(player.x, LANE_Y[2])   # 조작을 넘겨받은 순간 엉뚱한 쪽으로 달려가지 않게
+        player.x = max(player.x, INTRO_SKIP_X)
+        # 달리던 속도는 그대로 두고, 마우스를 조금 앞에 둔 것으로 쳐서 스르르 멈추게 한다 (마우스를 움직이면 그쪽으로)
+        player.mouse = camera.to_screen(player.x + 60, LANE_Y[2])
 
 
 def update():
@@ -409,8 +415,8 @@ def render_scene():
         g.draw_body()
     background.draw_terrain()
     game_world.render()
-    if player.x < WALL_X + 40:
-        wall.draw()                     # 주인공이 성벽 속(문간)에 있을 때는 벽 뒤에 가려진다
+    if in_intro():
+        wall.draw()                     # 시작 장면: 성벽·성문을 주인공 위에 덮어, 벽 앞면 밖으로 나온 만큼만 보이게
     background.draw_front()
     if flash_t > 0:
         render.rect(0, 0, SCREEN_W, SCREEN_H, (255, 245, 235), 75 * flash_t / 0.12)
