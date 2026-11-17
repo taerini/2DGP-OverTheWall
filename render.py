@@ -6,7 +6,7 @@ from sdl2 import (SDL_SetHint, SDL_SetRenderDrawBlendMode, SDL_BLENDMODE_BLEND, 
                   SDL_RenderFillRect, SDL_RenderDrawLine, SDL_Rect)
 from sdl2.sdlttf import TTF_OpenFont, TTF_RenderUTF8_Blended
 
-from config import SCREEN_H, FONT_UI
+from config import SCREEN_H, FONT_UI, PIXEL_FONTS
 
 _images = {}
 _fonts = {}
@@ -75,6 +75,15 @@ GLYPHS = {   # 5×7 픽셀 글자 (위에서 아래로)
     '9': ['.###.', '#...#', '#...#', '.####', '....#', '...#.', '.##..'],
     '-': ['.....', '.....', '.....', '#####', '.....', '.....', '.....'],
     '+': ['.....', '..#..', '..#..', '#####', '..#..', '..#..', '.....'],
+    ' ': ['.....'] * 7,
+    'O': ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+    'V': ['#...#', '#...#', '#...#', '#...#', '#...#', '.#.#.', '..#..'],
+    'E': ['#####', '#....', '#....', '####.', '#....', '#....', '#####'],
+    'R': ['####.', '#...#', '#...#', '####.', '#.#..', '#..#.', '#...#'],
+    'T': ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..'],
+    'H': ['#...#', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
+    'A': ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
+    'L': ['#....', '#....', '#....', '#....', '#....', '#....', '#####'],
 }
 
 
@@ -224,10 +233,23 @@ def line(x1, y1, x2, y2, rgb, a=255):
     SDL_RenderDrawLine(p2.renderer, int(x1), int(SCREEN_H - y1), int(x2), int(SCREEN_H - y2))
 
 
+def pixel_font(size):
+    """픽셀 글꼴 중 정수배 크기가 size 에 가장 가까운 (파일, 크기). 같으면 작은 쪽"""
+    best = None
+    for base, path in PIXEL_FONTS.items():
+        for k in range(1, 7):
+            cand = (abs(base * k - size), base * k, path)
+            if best is None or cand[:2] < best[:2]:
+                best = cand
+    return best[2], best[1]
+
+
 def text(s, x, y, size=18, color=(255, 255, 255), align='left', font=FONT_UI, alpha=1.0, shadow=True):
     """(x, y)는 글자 줄의 세로 가운데. align: left / center / right"""
     if not s:
         return
+    if font in PIXEL_FONTS.values():
+        font, size = pixel_font(size)
     if shadow:
         text(s, x + 1, y - 2, size, (0, 0, 0), align, font, alpha * 0.6, False)
     key = (s, size, color, font)

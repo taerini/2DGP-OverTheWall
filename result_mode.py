@@ -39,7 +39,7 @@ def handle_events():
     for event in get_events():
         if event.type == SDL_QUIT:
             game_framework.quit()
-        elif t > 1.0 and (event.type == SDL_MOUSEBUTTONDOWN or
+        elif t > 1.8 and (event.type == SDL_MOUSEBUTTONDOWN or
                           (event.type == SDL_KEYDOWN and event.key in (SDLK_SPACE, SDLK_RETURN, SDLK_ESCAPE))):
             game_framework.change_mode(title_mode)
 
@@ -49,28 +49,43 @@ def update():
     t += game_framework.frame_time
 
 
+TEXT = (244, 240, 230)
+SUB = (170, 172, 176)
+ARROW = ['#...', '##..', '###.', '####', '###.', '##..', '#...']   # 타이틀 화면과 같은 작은 화살표
+
+
+def fade(start, dur=0.6):
+    return max(0.0, min(1.0, (t - start) / dur))
+
+
 def draw():
+    # 플레이 화면이 어둠으로 끝나므로 어두운 바탕에서 글자만 차례로 떠오른다
     clear_canvas()
-    sky = render.image('sky_5.png' if win else 'sky_4.png')
-    sky.opacify(1.0)
-    sky.draw_to_origin(0, 0, SCREEN_W, SCREEN_H)
-    a = min(1.0, t)
+    render.rect(0, 0, SCREEN_W, SCREEN_H, (10, 10, 13), 255)
+    cx = SCREEN_W / 2
     if win:
-        title, sub = '적 요새 함락', '거인의 근원을 끊어냈다.'
+        title, sub, col = '적 요새 함락', '거인의 근원을 끊어냈다', (240, 214, 150)
     elif reason == 'dead':
-        title, sub = '쓰러졌다', '다시 일어나지 못했다…'
+        title, sub, col = '쓰러졌다', '다시 일어나지 못했다', (226, 120, 104)
     else:
-        title, sub = '벽이 무너졌다', '거인이 벽 안으로 쏟아져 들어온다…'
-    render.text(title, SCREEN_W / 2, 480, 60, (245, 236, 220) if win else (240, 150, 130), 'center', FONT_TITLE, a)
-    render.text(sub, SCREEN_W / 2, 410, 20, (210, 210, 210), 'center', alpha=a)
+        title, sub, col = '벽이 무너졌다', '거인이 벽 안으로 쏟아져 들어온다', (226, 120, 104)
+    render.text(title, cx, 470, 66, col, 'center', FONT_TITLE, fade(0.2, 1.0))   # 66 = 갈무리11 굵게 6배
+    render.text(sub, cx, 400, 18, SUB, 'center', alpha=fade(0.8), shadow=False)
+    # 기록: 이름은 흐리게 오른쪽 정렬, 값은 밝게 왼쪽 정렬
     s = int(seconds)
     rows = [('처치한 거인', f'{kills}'), ('강화 횟수', f'{upgrades}'), ('걸린 시간', f'{s // 60:02d}:{s % 60:02d}')]
+    a = fade(1.2)
+    render.rect(cx - 160, 337, cx + 160, 338, (80, 80, 88), 255 * a)
     for i, (k, v) in enumerate(rows):
-        y = 330 - i * 40
-        render.text(k, SCREEN_W / 2 - 20, y, 20, (200, 200, 200), 'right', alpha=a)
-        render.text(v, SCREEN_W / 2 + 20, y, 22, (255, 255, 255), alpha=a)
-    if t > 1.0:
-        render.text('클릭하여 타이틀로', SCREEN_W / 2, 150, 18, (190, 190, 190), 'center', alpha=0.6 + 0.4 * abs((t % 2) - 1))
-    vig = render.image('vignette.png')
-    vig.draw_to_origin(0, 0, SCREEN_W, SCREEN_H)
+        y = 300 - i * 40
+        render.text(k, cx - 16, y, 18, SUB, 'right', alpha=a, shadow=False)
+        render.text(v, cx + 16, y, 22, TEXT, alpha=a, shadow=False)
+    # 돌아가기 안내 (타이틀 화면과 같은 모양)
+    if t > 1.8:
+        a = fade(1.8)
+        y = 120
+        render.text('클릭하여 타이틀로', cx, y, 18, TEXT, 'center', alpha=a, shadow=False)
+        nudge = 5 * abs((t % 1.0) * 2 - 1)
+        render.pixel_map(ARROW, cx - 112 - nudge, y - 10, 3, {'#': TEXT}, 255 * a)
+        render.pixel_map([r[::-1] for r in ARROW], cx + 100 + nudge, y - 10, 3, {'#': TEXT}, 255 * a)
     update_canvas()

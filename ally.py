@@ -178,11 +178,10 @@ class Ally:
                                        '' if self.face > 0 else 'h', sx, sy + (cell / 2 - BASE) * w / cell,
                                        w, w)
         self.image.opacify(1.0)
-        top = sy + 12 + 33 * size / SCALE    # 머리 위 (크기에 맞춰 체력바·이름을 내린다)
+        top = sy + 12 + 33 * size / SCALE    # 머리 위 (크기에 맞춰 체력바를 내린다)
         if not self.alive():
             render.text(f'회복 {int(self.down_t) + 1}', sx, top + 5, 11, (200, 200, 200), 'center', alpha=0.8)
             return
-        render.text(self.NAME, sx, top + 11, 11, self.COLOR, 'center', alpha=0.8)
         k = self.hp / self.max_hp
         render.rect(sx - 12, top, sx + 12, top + 3, (10, 10, 14), 160)
         render.rect(sx - 12, top, sx - 12 + 24 * k, top + 3, (120, 220, 130) if k > 0.34 else (255, 120, 90), 230)
