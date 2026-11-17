@@ -1,4 +1,5 @@
 import math
+import random
 
 import camera
 import effect
@@ -58,6 +59,70 @@ class Rock:
         render.tint(self.img, (40, 38, 36))
         self.img.draw(sx, sy, 18, 18)
         render.untint(self.img)
+
+
+class Seed:
+    """수박 거인이 뱉는 수박씨. 입 높이(노린 층)를 따라 가로로 곧게 빠르게 난다."""
+    SPEED = 980.0
+    RANGE = 1300.0
+    HIT_R = 20.0
+
+    def __init__(self, x, y, d):
+        self.img = render.image('dot.png')
+        self.x, self.y = x, y
+        self.vx = d * Seed.SPEED
+        self.vy = random.uniform(-25, 25)          # 살짝씩 흩어진다
+        self.left = Seed.RANGE
+        self.spin = random.uniform(0, 6.28)
+
+    def update(self, dt):
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.spin += 18 * dt
+        self.left -= Seed.SPEED * dt
+        p = play_mode.player
+        px, py = p.center()
+        if not p.dead and abs(px - self.x) < Seed.HIT_R and abs(py - self.y) < Seed.HIT_R + 8:
+            p.hurt(self.x, 1)
+            self.pop()
+            return
+        for a in play_mode.allies():
+            ax, ay = a.center()
+            if abs(ax - self.x) < Seed.HIT_R and abs(ay - self.y) < Seed.HIT_R + 8:
+                a.hurt(self.x)
+                self.pop()
+                return
+        if self.left <= 0:
+            game_world.remove_object(self)
+
+    def pop(self):
+        effect.burst(self.x, self.y, 4, (60, 40, 32), 12, 90)
+        game_world.remove_object(self)
+
+    def draw(self):
+        sx, sy = camera.to_screen(self.x, self.y)
+        d = 1 if self.vx > 0 else -1
+        # 지나온 쪽으로 옅은 꼬리
+        for k in (1, 2, 3):
+            render.rect(sx - d * (8 + k * 10) - 4, sy - 2, sx - d * (8 + k * 10) + 4, sy + 2, (255, 240, 225), 150 - 40 * k)
+        # 픽셀 수박씨: 돌면서 세운 모양 / 눕힌 모양이 번갈아 나온다 (눕힌 모양은 뾰족한 쪽이 날아가는 쪽)
+        rows = SEED if int(self.spin / 1.2) % 2 == 0 else (SEED_SIDE if d < 0 else [r[::-1] for r in SEED_SIDE])
+        u = 3
+        render.pixel_map(rows, sx - len(rows[0]) * u / 2, sy - len(rows) * u / 2, u, SEED_COLORS)
+
+
+# 수박씨: 한쪽이 뾰족한 검은 씨, 가운데에 동그란 반사 빛
+SEED = ['...K...',
+        '..KKK..',
+        '.KKKKK.',
+        '.KKKKK.',
+        'KKKWWKK',
+        'KKKWWKK',
+        'KKKKKKK',
+        '.KKKKK.',
+        '..KKK..']
+SEED_SIDE = [''.join(r[i] for r in SEED) for i in range(len(SEED[0]))]   # 눕힌 모양 (뾰족한 쪽이 왼쪽)
+SEED_COLORS = {'K': (20, 16, 14), 'W': (236, 236, 240)}
 
 
 FORT_BALL = 10.0        # 대포알이 요새에 주는 피해

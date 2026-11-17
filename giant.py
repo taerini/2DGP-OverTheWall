@@ -9,7 +9,7 @@ import map_data
 import play_mode
 import render
 from config import *
-from projectile import Rock
+from projectile import Rock, Seed
 
 with open('resource/giant_meta.json') as f:         # 갑옷 거인 시트(giant_armor.png)는 예전 320px 칸 형식 그대로
     ARMOR_META = json.load(f)
@@ -35,9 +35,10 @@ class Sheet:
 
 
 SHEETS = {'basic': Sheet('giant_px'), 'thin': Sheet('giant_thin'),
-          'female': Sheet('giant_female'), 'beast': Sheet('giant_beast_px')}
+          'female': Sheet('giant_female'), 'beast': Sheet('giant_beast_px'),
+          'melon': Sheet('giant_melon')}
 # 날뛰는 거인은 마른 거인, 영리한 거인(보스)은 여성형 거인, 돌 던지는 거인(보스)은 짐승 거인 그림. 나머지는 기본 거인
-KIND_SHEET = {'erratic': 'thin', 'smart': 'female', 'thrower': 'beast'}
+KIND_SHEET = {'erratic': 'thin', 'smart': 'female', 'thrower': 'beast', 'melon': 'melon'}
 
 
 def giant_height(k, sh=SHEETS['basic']):
@@ -60,12 +61,13 @@ KINDS = {
     'smart':    dict(size=(3,), speed=(125, 125), hp=3.2, boss='빠르고 영리한 거인'),
     'thrower':  dict(size=(4,), speed=(26, 26), hp=3.0, boss='돌 던지는 거인'),
     'colossal': dict(size=(5,), speed=(20, 20), hp=3.0, boss='거대 거인'),
+    'melon':    dict(size=(4,), speed=(30, 30), hp=3.2, boss='수박 거인'),   # 키 4층, 수박씨를 뱉는다
 }
 KNEEL_TIME = 2.6
 WAKE_DIST = 1300.0       # 미리 서 있는 거인은 주인공이 이만큼 가까워지면 움직이기 시작한다
 RUN_MULT = 2.6           # 달릴 때 걷는 속도의 몇 배
 RUN_FAR = 1400.0         # 주인공과 이만큼 멀면 늘 달린다 (먼 요새에서 벽까지 금방 온다)
-NO_RUN = ('thrower', 'colossal')    # 느릿느릿 걷는 보스
+NO_RUN = ('thrower', 'colossal', 'melon')    # 느릿느릿 걷는 보스
 CHASE_R = 450.0          # 보스가 아닌 거인은 주인공이 이 반경(+몸 크기) 안에 오면 뛰어와서 공격한다
 # 마른 거인(날뛰는 거인)의 돌진: 쫓아가다 멈춰 서서 앞쪽에 빨간 범위를 띄우고 → 앞으로 확 덮친다
 LUNGE_CHASE_R = 340.0    # 빨라서 쫓기 시작하는 반경은 조금 좁게
@@ -104,7 +106,21 @@ PART_NAME = {'neck': '목덜미', 'ankle': '발목', 'body': '몸통'}
 DMG_SPREAD = (0.85, 1.15)    # 벨 때마다 피해가 이 범위에서 흔들린다
 CRIT_RATE = 0.2
 CRIT_MULT = 1.5
-HP_BY_SIZE = {1: 110, 2: 175, 3: 245, 4: 320, 5: 400}   # 크기별 기본 체력. 처음 공격력(40)으로 목덜미 3 / 4~5 / 6 / 8 / 9~10번
+HP_BY_SIZE = {1: 110, 2: 175, 3: 245, 4: 320, 5: 400}
+# 수박 거인: 숨을 들이켜고(입 크게 벌림) → '후!!!!' 하며 수박씨를 가로로 곧게 뱉는다.
+# 주인공이 있는 층을 노린다: 5층은 점프, 4층은 선 채로, 3층은 쭈그려, 2층은 엎드려서. 1층(발밑)은 안전하다
+MELON_INHALE = 0.8       # 숨 들이켜는 시간 (노린 층에 빨간 띠로 예고)
+MELON_SPIT = 2.0         # 씨를 뱉는 시간
+MELON_SEEDS = 10         # 한 번에 뱉는 씨 수
+MELON_CD = 3.0           # 다 뱉고 나서 다음 공격까지
+MELON_RANGE = 1000.0     # 주인공이 가로로 이만큼 안에 있으면 공격한다
+MELON_RECOVER = 0.35     # 뱉고 나서 원래 자세로 돌아오는 시간
+MELON_MOUTH = (0.21, 0.57)   # 입 위치: 키에 대한 비율 (앞쪽으로, 발밑에서 위로). giant_melon 그림에서 잰 값
+MELON_HEIGHT = 520.0     # 키: 수박 머리 2.5층, 덩굴 몸 1.5층 (서 있으면 입이 3층, 목이 2층 높이)
+MELON_POSE_GAP = 60.0    # 입 높이 차이가 이보다 크면 점프 / 쭈그리기 자세를 쓴다
+MELON_JUMP_HOLD = (4, 5)     # 씨를 뱉는 동안 번갈아 쓰는 공중 프레임 (jump 줄)
+MELON_JUMP_RISE = 14.0       # 공중 프레임에서 그림이 떠 있는 높이 (그림 단위)
+MELON_CROUCH_DROP = 22.0     # 가장 깊이 숙인 프레임(crouch 3번)에서 수박이 내려간 높이 (그림 단위)   # 크기별 기본 체력. 처음 공격력(40)으로 목덜미 3 / 4~5 / 6 / 8 / 9~10번
 
 
 def floor_of(y):
@@ -118,7 +134,7 @@ class Giant:
         self.boss = info.get('boss')
         self.k = k
         self.sh = SHEETS[KIND_SHEET.get(kind, 'basic')]
-        self.size = giant_height(k, self.sh)
+        self.size = MELON_HEIGHT if kind == 'melon' else giant_height(k, self.sh)
         self.speed = random.uniform(*info['speed']) * (1.12 - 0.08 * k)
         self.max_hp = HP_BY_SIZE[k] * info['hp'] * hp_mult
         self.hp = self.max_hp
@@ -141,6 +157,9 @@ class Giant:
         self.guard_t, self.guard_cd = 0.0, 3.0   # 영리한 거인: 목덜미 가리기
         self.throw_cd = 2.5                      # 돌 던지는 거인
         self.blast_cd = 8.0                      # 거대 거인
+        self.melon_cd = 2.0                      # 수박 거인: 다음 씨 뱉기까지
+        self.melon_floor = 3                     # 수박 거인: 노리는 층 (0부터)
+        self.seeds_left = 0
         self.steam_t = 0.0
         self.flash_t = 0.0
         self.crit = False                        # 마지막으로 맞은 공격이 치명타였나
@@ -185,6 +204,8 @@ class Giant:
             if self.state == 'wall':
                 return 'grab', int(self.state_t / 0.15) % self.sh.frames['grab']
             return 'grab', min(self.sh.frames['grab'] - 1, int((GRAB_TIME - self.state_t) / (GRAB_TIME / self.sh.frames['grab'])))
+        if self.state in ('inhale', 'spit', 'melon_end'):
+            return self.melon_frame()
         if self.state == 'throw':
             # 던지기 줄은 없앴다: 팔을 앞으로 뻗는 잡기 동작으로 던진다
             return 'grab', min(self.sh.frames['grab'] - 1, int((0.9 - self.state_t) / (0.9 / self.sh.frames['grab'])))
@@ -210,7 +231,8 @@ class Giant:
                 dy = self.sh.walk_nape * self.sh.h
             elif row == 'run':
                 dy = self.sh.run_nape * self.sh.h
-        return self.x + dx * self.scale * (-self.dir), self.y + dy * self.scale
+        lift, sq = self.melon_pose()
+        return self.x + dx * self.scale * (-self.dir), self.y + lift + dy * self.scale * sq
 
     def neck_floor(self):
         return floor_of(self.nape()[1])
@@ -220,7 +242,119 @@ class Giant:
 
     def get_bb(self):
         h = self.size * (self.sh.kneel_nape + 0.12 if self.kneel_t > 0 else 1.0)
-        return self.x - self.size * 0.15, self.y, self.x + self.size * 0.15, self.y + h
+        lift, sq = self.melon_pose()
+        return self.x - self.size * 0.15, self.y + lift, self.x + self.size * 0.15, self.y + lift + h * sq
+
+    # ------------------------------------------------ 수박 거인
+    def melon_weight(self):
+        """공격 자세(점프·쭈그리기)로 얼마나 바뀌었나 0~1"""
+        if self.kind != 'melon' or self.kneel_t > 0:
+            return 0.0
+        if self.state == 'inhale':
+            k = min(1.0, (1 - self.state_t / MELON_INHALE) / 0.4)
+            return k * k * (3 - 2 * k)
+        if self.state == 'spit':
+            return 1.0
+        if self.state == 'melon_end':
+            return max(0.0, self.state_t / MELON_RECOVER)
+        return 0.0
+
+    def melon_need(self):
+        """노린 층에 입을 맞추려면 서 있을 때보다 얼마나 높여야(+) / 낮춰야(-) 하나"""
+        stand = self.size * MELON_MOUTH[1]                     # 서 있을 때 입 높이 (발밑에서)
+        want = LANE_Y[self.melon_floor] + 22 - self.y           # 노린 층에서 주인공 몸 가운데 높이
+        return want - stand
+
+    def melon_style(self):
+        """이번 공격 자세: 'jump' / 'crouch' / 'stand'"""
+        need = self.melon_need()
+        if need > MELON_POSE_GAP:
+            return 'jump'
+        if need < -MELON_POSE_GAP:
+            return 'crouch'
+        return 'stand'
+
+    def melon_pose(self):
+        """(그림 위에 더 띄울 높이, 세로로 찌그러진 비율). 점프·쭈그리기는 그림이 하고, 모자란 만큼만 채운다"""
+        w = self.melon_weight()
+        if w <= 0:
+            return 0.0, 1.0
+        style, need = self.melon_style(), self.melon_need()
+        if style == 'jump':
+            if self.state == 'inhale':
+                return 0.0, 1.0                                # 무릎 굽혀 뛰어오르는 중: 그림만
+            return max(0.0, need - MELON_JUMP_RISE * self.scale) * w, 1.0
+        return 0.0, 1.0                                        # 쭈그리기는 그림이 몸을 숙인다 (수박은 찌그러뜨리지 않는다)
+
+    def mouth(self):
+        """입 위치. 씨를 뱉을 때는 노린 층 높이에 맞춰져 있다"""
+        h = self.size * MELON_MOUTH[1]
+        style = self.melon_style()
+        if self.state in ('spit', 'melon_end') and style == 'jump':
+            h += self.melon_need() * self.melon_weight()
+        elif style == 'crouch':
+            h -= MELON_CROUCH_DROP * self.scale * self.melon_weight()   # 숙인 그림의 입 높이
+        return self.x + self.dir * self.size * MELON_MOUTH[0], self.y + h
+
+    def melon_frame(self):
+        """수박 거인 공격 프레임: 선 채로는 숨 들이켜기·뱉기 그림, 점프·쭈그리기는 그 줄 그림"""
+        style = self.melon_style()
+        if self.state == 'inhale':
+            k = 1 - self.state_t / MELON_INHALE
+            if style == 'jump':
+                return 'jump', min(3, int(k * 4))                     # 무릎 굽히기 → 뛰어오르기
+            if style == 'crouch':
+                return 'crouch', min(3, int(k * 4))
+            n = self.sh.frames['inhale']
+            return 'inhale', min(n - 1, int(k * n))
+        if self.state == 'spit':
+            if style == 'jump':
+                return 'jump', MELON_JUMP_HOLD[int(self.anim_t * 8) % 2]
+            if style == 'crouch':
+                return 'crouch', 3
+            return 'spit', int(self.anim_t * 14) % self.sh.frames['spit']
+        k = 1 - self.state_t / MELON_RECOVER                          # melon_end: 원래 자세로
+        if style == 'jump':
+            return 'jump', min(7, 6 + int(k * 2))                      # 내려와 착지
+        if style == 'crouch':
+            return 'crouch', max(0, 3 - int(k * 4))
+        return 'walk', 0
+
+    def melon_start(self):
+        """주인공이 가까우면 그쪽을 보고 숨을 들이켠다. 노릴 층은 이때 정한다"""
+        p = play_mode.player
+        if self.melon_cd > 0 or p.dead or abs(p.x - self.x) > MELON_RANGE:
+            return False
+        if not (camera.x + 60 < self.x < camera.x + SCREEN_W - 60):
+            return False                        # 화면에 보일 때만 (안 보이는 곳에서 쏘지 않는다)
+        self.dir = 1 if p.x > self.x else -1
+        self.melon_floor = max(1, min(4, p.floor()))
+        self.state, self.state_t = 'inhale', MELON_INHALE
+        self.seeds_left = MELON_SEEDS
+        return True
+
+    def update_melon(self):
+        if self.state == 'inhale':
+            if self.state_t <= 0:
+                self.state, self.state_t = 'spit', MELON_SPIT
+                mx, my = self.mouth()
+                effect.add(effect.FloatText(mx + self.dir * 30, my + 50, '후!!!!', (255, 250, 240), 44))
+                camera.shake(0.15, 5)
+            return
+        if self.state == 'spit':
+            # 2초 동안 고르게 나눠 뱉는다
+            due = MELON_SEEDS - int(self.state_t / MELON_SPIT * MELON_SEEDS)
+            while MELON_SEEDS - self.seeds_left < min(MELON_SEEDS, due):
+                self.seeds_left -= 1
+                mx, my = self.mouth()
+                game_world.add_object(Seed(mx, my, self.dir), LAYER_PROJECTILE)
+                effect.steam(mx, my, 1, 6, (255, 220, 210), 14)
+            if self.state_t <= 0:
+                self.state, self.state_t = 'melon_end', MELON_RECOVER
+            return
+        if self.state_t <= 0:                   # melon_end: 원래 자세로 돌아왔다
+            self.state = 'walk'
+            self.melon_cd = MELON_CD
 
     def part_for(self, floor):
         """그 층에서 베면 어디를 베는가. 목 층 이상이면 목, 서 있는 층이면 발목, 그 사이는 몸통"""
@@ -263,7 +397,9 @@ class Giant:
                 effect.steam(self.x, self.y + 6, 2 + self.k, self.size * 0.12, (170, 160, 150), 16 + 6 * self.k)
             self.kneel_t = 1.6 if self.kind == 'colossal' else KNEEL_TIME
             self.guard_t = 0.0
-            if self.state in ('grab', 'throw', 'lunge_warn', 'lunge', 'lunge_end'):
+            if self.state in ('grab', 'throw', 'lunge_warn', 'lunge', 'lunge_end', 'inhale', 'spit', 'melon_end'):
+                if self.kind == 'melon':
+                    self.melon_cd = MELON_CD
                 self.state = 'walk'
         elif self.armor > 0:
             dmg *= 0.4
@@ -368,6 +504,8 @@ class Giant:
                 self.throw_rock()
             if self.state_t <= 0:
                 self.state = 'walk'
+        elif self.state in ('inhale', 'spit', 'melon_end'):
+            self.update_melon()
         elif self.state == 'climb':
             self.y += 70 * dt
             if self.y >= LANE_Y[self.lane + 1]:
@@ -488,6 +626,10 @@ class Giant:
                 self.guard_t, self.guard_cd = 1.4, 4.0
             if self.guarding():
                 speed *= 0.4
+        elif self.kind == 'melon':
+            self.melon_cd -= dt
+            if self.melon_start():
+                return
         elif self.kind == 'thrower':
             self.throw_cd -= dt
             p = play_mode.player
@@ -664,6 +806,30 @@ class Giant:
                 render.rect(sx1, sy1, sx1 + fill, sy1 + 4, DANGER, 230)
             else:
                 render.rect(sx2 - fill, sy1, sx2, sy1 + 4, DANGER, 230)
+        if self.state == 'inhale' and self.alive() and self.kneel_t <= 0:
+            # 수박씨가 날아갈 층: 입 앞쪽으로 그 층 한 줄 전체
+            k = min(1.0, 1 - self.state_t / MELON_INHALE)
+            mx, my = self.mouth()
+            low = LANE_Y[self.melon_floor]
+            x1, x2 = sorted((mx, mx + self.dir * Seed.RANGE))
+            sx1, sy1 = camera.to_screen(x1, low)
+            sx2, sy2 = camera.to_screen(x2, low + 60)
+            render.rect(sx1, sy1, sx2, sy2, DANGER, 30 + 80 * k)
+            fill = (sx2 - sx1) * k
+            if self.dir < 0:
+                render.rect(sx2 - fill, sy1, sx2, sy1 + 4, DANGER, 230)
+            else:
+                render.rect(sx1, sy1, sx1 + fill, sy1 + 4, DANGER, 230)
+            # 공기를 빨아들이는 바람줄: 앞쪽에서 입으로 모여든다
+            msx, msy = camera.to_screen(mx, my)
+            for i in range(7):
+                ph = (self.anim_t * 2.2 + i / 7) % 1.0
+                ang = (i / 6 - 0.5) * 1.6
+                d = 30 + 150 * (1 - ph)
+                x0 = msx + self.dir * d * math.cos(ang)
+                y0 = msy + d * math.sin(ang)
+                ux, uy = (msx - x0) / d, (msy - y0) / d
+                render.line(x0, y0, x0 + ux * 22, y0 + uy * 22, (235, 240, 245), 200 * ph)
         if self.kind == 'colossal' and self.alive() and self.blast_cd < BLAST_WARN:
             k = 1 - self.blast_cd / BLAST_WARN
             cx, cy = camera.to_screen(self.x, self.y + self.size * 0.5)
@@ -708,8 +874,9 @@ class Giant:
             sh = self.sh
             m, nrows, cpx, cell, scale = sh.meta, len(sh.rows), sh.cell_px, sh.cell, self.scale
         w = cell * scale
+        lift, sq = self.melon_pose()
         img.clip_composite_draw(fr * cpx, (nrows - 1 - r) * cpx, cpx, cpx, 0,
-                                'h' if self.dir > 0 else '', sx, sy + (cell / 2 - m['base']) * scale, w, w)
+                                'h' if self.dir > 0 else '', sx, sy + lift + (cell / 2 - m['base']) * scale * sq, w, w * sq)
         render.untint(img)
 
     def draw(self):
@@ -746,6 +913,3 @@ class Giant:
             k = max(0.0, self.hp / self.max_hp)
             render.rect(nsx - 16, nsy + 14, nsx + 16, nsy + 17, (0, 0, 0), 140)
             render.rect(nsx - 16, nsy + 14, nsx - 16 + 32 * k, nsy + 17, (230, 90, 70), 220)
-        # 크기 표시
-        render.text(f'{self.k}', sx, sy + self.size * (self.sh.kneel_nape if self.kneel_t > 0 else 1.0) + 12, 12,
-                    (230, 220, 210), 'center', alpha=0.7)

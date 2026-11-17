@@ -34,6 +34,7 @@ spawn_t = {}
 hitstop = 0.0       # 목덜미를 벨 때 잠깐 멈추는 시간
 flash_t = 0.0       # 처치할 때 화면 번쩍임
 visited = set()
+farthest_x = 0.0    # 주인공이 가 본 가장 먼 곳 (새로 나오는 거인 크기를 정한다)
 bosses_spawned = set()
 
 
@@ -85,18 +86,30 @@ def neck_juice(g, dmg, killed, face, big=True):
         camera.shake(0.16, 7)
 
 
+DEATH_FADE = (0.5, 2.2)     # 쓰러진 뒤 (이만큼 지나서, 이 시간 동안) 화면이 점점 어두워진다
+DEATH_END = 3.3             # 쓰러진 뒤 결과 화면으로 넘어가기까지 (어두워진 뒤 잠깐 머문다)
+
+
 def on_player_down():
-    """주인공이 쓰러졌다: 생명은 하나뿐이라 그대로 패배"""
-    global end_t
+    """주인공이 쓰러졌다: 생명은 하나뿐이라 그대로 패배. 뒤로 넘어가는 동안 화면이 점점 어두워진다"""
+    global end_t, hitstop
     if end_t is None:
-        end_t = 2.0
+        end_t = DEATH_END
+        hitstop = max(hitstop, 0.15)       # 마지막 한 방에 잠깐 멈칫
         camera.shake(0.6)
-        hud.show_message('쓰러졌다…', 2.0)
         result_mode.set_result(False, kills, upgrades_taken, play_time, 'dead')
 
 
+def death_dark():
+    """쓰러진 뒤 화면을 덮는 어둠 (0~1)"""
+    if not player.dead:
+        return 0.0
+    k = max(0.0, min(1.0, (player.death_t - DEATH_FADE[0]) / DEATH_FADE[1]))
+    return k * k * (3 - 2 * k)
+
+
 # ------------------------------------------------ 거인 생성
-# 구간별 일반 거인 크기(1~5) 비율. 이야기가 나아갈수록 조금씩 커진다.
+# 일반 거인 크기(1~5) 비율. 맵을 나아갈수록(맵 길이를 아래 줄 수로 나눈 단계마다) 조금씩 커진다.
 # 크기 4 는 드물게만, 크기 5 는 보스만 쓴다 (큰 거인이 흔하면 보스가 보스 같지 않다)
 SIZE_WEIGHTS = [
     (85, 15, 0, 0, 0),
@@ -109,6 +122,7 @@ SIZE_WEIGHTS = [
     (40, 34, 21, 5, 0),
     (38, 34, 22, 6, 0),
 ]
+PRESET_GAP = 1300.0  # 처음부터 서 있는 거인 사이 거리
 MAX_ALIVE = 22      # 처음에 한 번에 살아 있는 일반 거인 수 (길이 다 막히지 않게)
 SPAWN_RAMP = 300.0  # 이 시간(초)에 걸쳐 거인이 점점 늘어 처음의 SPAWN_MAX 배가 된다
 SPAWN_MAX = 2.0
@@ -119,6 +133,11 @@ def spawn_mult():
     return 1 + (SPAWN_MAX - 1) * min(1.0, play_time / SPAWN_RAMP)
 
 
+def size_stage(x):
+    """x 까지 나아갔을 때 쓰는 SIZE_WEIGHTS 줄"""
+    return max(0, min(len(SIZE_WEIGHTS) - 1, int(x / MAP_W * len(SIZE_WEIGHTS))))
+
+
 def spawn(kind, x, k=None, lane=None, zone=None):
     """크기 k 거인을 x 에 낸다. k 가 없으면 zone(기본: x 가 있는 구간)의 비율로 고른다.
     층은 머리가 화면을 넘지 않는 층 중에서 무작위로 고른다."""
@@ -127,7 +146,7 @@ def spawn(kind, x, k=None, lane=None, zone=None):
     if k is None:
         # 그 자리에 깔린 층 수보다 큰 거인은 내지 않는다 (층이 적은 초반엔 작은 거인 위주)
         floors = sum(1 for i in range(5) if any(x1 < x + 600 and x2 > x - 600 for x1, x2 in map_data.lanes[i]))
-        weights = SIZE_WEIGHTS[zone_of(x) if zone is None else zone]
+        weights = SIZE_WEIGHTS[size_stage(x if zone is None else farthest_x)]
         allowed = [s for s in sizes if s <= floors and weights[s - 1] > 0] or [min(sizes)]
         k = random.choices(allowed, [weights[s - 1] or 1 for s in allowed])[0]
     lanes = [i for i in range(max_lane(k) + 1) if map_data.segment_at(i, x)]
@@ -145,27 +164,39 @@ def progress():
     return max(visited) if visited else 0
 
 
-def spawn_boss(kind):
-    g = spawn(kind, FORTRESS_X + 40, lane=0, zone=progress())
-    hud.show_message(f'{g.boss}가 요새에서 나왔다! (크기 {g.k})', 3.0)
+def josa_i(word):
+    """받침이 있으면 '이', 없으면 '가'"""
+    c = ord(word[-1]) - 0xAC00
+    return '이' if 0 <= c < 11172 and c % 28 else '가'
+
+
+def spawn_boss(kind, x=None):
+    g = spawn(kind, FORTRESS_X + 40 if x is None else x, lane=0, zone=progress())
+    g.waiting = False
+    hud.show_message(f'{g.boss}{josa_i(g.boss)} 요새에서 나왔다!', 3.0)
 
 
 # 새로 나오는 거인 종류. 시간이 지날수록 다양해진다 (종류, 가중치, 나오기 시작하는 시간)
 FORT_KINDS = [('normal', 40, 0), ('erratic', 20, 0), ('climber', 18, 60), ('swarm', 14, 120), ('armed', 30, 180)]
 
 
-SPAWN_HIDE = 600.0  # 새 거인은 화면 오른쪽 끝에서 이만큼 더 바깥에 만든다 (생기는 모습이 안 보이게)
+# 시작 장면 시간표 (초)
+INTRO_PAN = 2.2            # 성벽을 가득 보여 주던 카메라가 오른쪽으로 옮겨 간다
+INTRO_GATE = (2.3, 3.8)    # 성문 쇠창살이 올라간다
+INTRO_WALK = 3.3           # 주인공이 성벽 속에서 달려 나오기 시작 (성문이 2/3쯤 열렸을 때)
+INTRO_START_X = WALL_X - 270   # 주인공 처음 자리: 성벽 속 (벽에 가려 안 보인다)
+INTRO_END = 4.8            # 조작 시작 (클릭하면 건너뛴다)
+INTRO_CAM_FROM = -1200.0   # 처음 카메라 위치: 성벽이 화면을 가득 채운다
+INTRO_WALK_TO = WALL_X + 150
+intro_t = 0.0
+
+SPAWN_HIDE = (600.0, 2000.0)   # 새 거인은 화면 오른쪽 끝에서 이만큼 더 바깥에 만든다 (생기는 모습이 안 보이게)
 
 
 def spawn_x():
-    """새 거인이 나올 자리: 주인공이 있는 구간의 다음 구간 시작점. 화면에 보이면 화면 밖으로 민다.
-    마지막(요새) 구간이면 요새에서 나온다."""
-    z = zone_of(player.x)
-    fort = FORTRESS_X + 40
-    if z >= ZONE_COUNT - 1:
-        return fort
-    x = max((z + 1) * ZONE_W, camera.x + SCREEN_W + SPAWN_HIDE)
-    return min(x, fort)
+    """새 거인이 나올 자리: 화면 오른쪽 바깥 조금 앞. 요새보다 멀리는 가지 않는다."""
+    x = camera.x + SCREEN_W + random.uniform(*SPAWN_HIDE)
+    return min(x, FORTRESS_X + 40)
 
 
 def fort_spawn():
@@ -191,15 +222,24 @@ def update_spawns(dt):
         if alive < MAX_ALIVE * m:
             fort_spawn()
 
+    global farthest_x
+    farthest_x = max(farthest_x, player.x)
     # 구간에 처음 들어가면 이름을 띄우고 보스를 내보낸다
     z = zone_of(player.x)
     if z not in visited:
         visited.add(z)
         hud.show_banner(f'{z + 1}. {ZONES[z]["name"]}', ZONES[z]['story'])
-        boss = ZONES[z].get('boss')
-        if boss and boss not in bosses_spawned:
+    # 구간 보스: 들어가자마자 요새에서 나오거나, boss_at 만큼 들어가면 화면 오른쪽 바깥에서 나온다
+    info = ZONES[z]
+    boss = info.get('boss')
+    if boss and boss not in bosses_spawned:
+        at = info.get('boss_at')
+        if at is None:
             bosses_spawned.add(boss)
             spawn_boss(boss)
+        elif player.x >= (z + at) * ZONE_W:
+            bosses_spawned.add(boss)
+            spawn_boss(boss, min(camera.x + SCREEN_W + 260, FORTRESS_X))   # 화면 오른쪽 바로 바깥
 
 
 # ------------------------------------------------ 모드
@@ -221,29 +261,34 @@ def init():
     hitstop = flash_t = 0.0
     visited.clear()
     bosses_spawned.clear()
+    global farthest_x
+    farthest_x = 0.0
     spawn_t.clear()
-    spawn_t['fort'] = 4.0
+    spawn_t['fort'] = 4.0       # 시작 장면이 끝난 뒤 이만큼 지나야 첫 거인이 나온다
+    global intro_t
+    intro_t = 0.0
 
     background = Background()
     hud = Hud()
     wall = Wall()
     fortress = Fortress()
     player = Player()
+    player.x = INTRO_START_X            # 성벽 속에서 기다리다 문이 열리면 달려 나온다
+    player.hidden, player.auto_x = False, None
     game_world.add_object(wall, LAYER_BUILDING)
     game_world.add_object(fortress, LAYER_BUILDING)
     game_world.add_object(player, LAYER_PLAYER)
-    camera.reset(player.x)
+    camera.x = INTRO_CAM_FROM
 
-    # 처음부터 구간마다 그 구간의 거인이 서 있다 (이후로는 다음 구간 시작점에서 나온다).
+    # 처음부터 길 곳곳에 그 구간의 거인이 서 있다 (이후로는 화면 오른쪽 바깥에서 나온다).
     # 주인공이 가까이 올 때까지 제자리에서 기다리므로, 시작하면 첫 구간의 작은 거인부터 만난다
-    for x in (1100, 1700, 2400, 3200):
-        spawn('normal' if x < 2000 else ZONES[0]['kind'], x, k=1).waiting = True
-    # 뒤 구간일수록 미리 서 있는 거인이 많다 (2구간 3마리 → 마지막 앞 구간 6마리)
-    for z in range(1, ZONE_COUNT - 1):
-        n = round(3 + 3 * (z - 1) / max(1, ZONE_COUNT - 3))
-        for i in range(n):
-            x = z * ZONE_W + (i + 0.5) * ZONE_W / n + random.uniform(-150, 150)
-            spawn(ZONES[z]['kind'], x).waiting = True
+    for x in (3000, 3600, 4300, 5000):
+        spawn('normal' if x < 3800 else ZONES[0]['kind'], x, k=1).waiting = True
+    # 그 뒤로는 PRESET_GAP 마다 하나씩, 요새 앞까지. 뒤로 갈수록 조금 더 빽빽하다
+    x = 5400.0
+    while x < FORTRESS_X - 1500:
+        x += PRESET_GAP * random.uniform(0.75, 1.25) * (1 - 0.35 * x / MAP_W)
+        spawn(ZONES[zone_of(x)]['kind'], x).waiting = True
 
 
 def finish():
@@ -258,10 +303,24 @@ def resume():
     pass
 
 
+def in_intro():
+    return intro_t < INTRO_END
+
+
+def skip_intro():
+    global intro_t
+    intro_t = INTRO_END
+
+
 def handle_events():
     for event in get_events():
         if event.type == SDL_QUIT:
             game_framework.quit()
+        elif in_intro():
+            if event.type == SDL_KEYDOWN and event.key == SDLK_ESCAPE:
+                game_framework.change_mode(title_mode)
+            elif event.type == SDL_MOUSEBUTTONDOWN or (event.type == SDL_KEYDOWN and event.key in (SDLK_SPACE, SDLK_RETURN)):
+                skip_intro()
         elif event.type == SDL_KEYDOWN:
             if event.key == SDLK_ESCAPE:
                 game_framework.change_mode(title_mode)
@@ -279,9 +338,38 @@ def handle_events():
                 player.fire_wire(*player.mouse)
 
 
+def update_intro(dt):
+    """시작 장면: 카메라가 성벽에서 오른쪽으로 → 성문이 열리고 → 주인공이 걸어 나온다"""
+    global intro_t
+    intro_t += dt
+    k = min(1.0, intro_t / INTRO_PAN)
+    k = k * k * (3 - 2 * k)
+    camera.x = INTRO_CAM_FROM + (camera.MIN_X - INTRO_CAM_FROM) * k
+    g0, g1 = INTRO_GATE
+    was = wall.gate_open
+    wall.gate_open = max(0.0, min(1.0, (intro_t - g0) / (g1 - g0)))
+    if was <= 0 < wall.gate_open:
+        camera.shake(g1 - g0, 2.5)                     # 쇠창살이 올라가는 동안 땅이 웅웅 울린다
+    if intro_t >= INTRO_WALK:
+        player.auto_x = INTRO_WALK_TO
+    background.update(dt)
+    game_world.update(dt)
+    if intro_t >= INTRO_END:                            # 끝 (또는 건너뜀): 문은 활짝, 주인공은 밖으로, 조작 시작
+        wall.gate_open = 1.0
+        player.hidden, player.auto_x = False, None
+        player.x = max(player.x, INTRO_WALK_TO)
+        player.vx = 0.0
+        player.mouse = camera.to_screen(player.x, LANE_Y[2])   # 조작을 넘겨받은 순간 엉뚱한 쪽으로 달려가지 않게
+
+
 def update():
     global play_time, end_t, pending_upgrades, upgrades_taken, hitstop, flash_t
     dt = game_framework.frame_time
+    if in_intro():
+        update_intro(dt)
+        return
+    if player.auto_x is not None:                       # 건너뛴 직후 한 번 정리
+        update_intro(0.0)
     flash_t = max(0.0, flash_t - dt)
     if hitstop > 0:
         # 멈칫하는 동안 세상은 멈추고 화면만 흔들린다
@@ -321,10 +409,19 @@ def render_scene():
         g.draw_body()
     background.draw_terrain()
     game_world.render()
+    if player.x < WALL_X + 40:
+        wall.draw()                     # 주인공이 성벽 속(문간)에 있을 때는 벽 뒤에 가려진다
     background.draw_front()
     if flash_t > 0:
         render.rect(0, 0, SCREEN_W, SCREEN_H, (255, 245, 235), 75 * flash_t / 0.12)
-    hud.draw()
+    if not in_intro():
+        hud.draw()
+    elif intro_t > 1.0:
+        a = min(1.0, (intro_t - 1.0) / 0.5)
+        render.text('클릭하면 건너뛰기', SCREEN_W - 24, 28, 14, (220, 220, 220), 'right', alpha=0.7 * a, shadow=False)
+    dark = death_dark()
+    if dark > 0:
+        render.rect(0, 0, SCREEN_W, SCREEN_H, (0, 0, 0), 255 * dark)
 
 
 def draw():

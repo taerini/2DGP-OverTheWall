@@ -1,7 +1,7 @@
 SCREEN_W, SCREEN_H = 1280, 720
 
-# 맵: 구간 9개 (이야기 흐름 순서), 왼쪽 끝은 우리 벽, 오른쪽 끝은 적 요새
-ZONE_W = 4000               # 구간 하나의 길이. 달리고 날아도 한 구간에 한참 머물게
+# 맵: 구간들 (이야기 흐름 순서), 왼쪽 끝은 우리 벽, 오른쪽 끝은 적 요새
+MAP_LEN = 36000              # 맵 전체 길이 (구간 수와 상관없이 같다)
 # 길 5줄 (윗면 y)
 LANE_GAP = 115
 LANE_Y = [70 + LANE_GAP * i for i in range(5)]
@@ -10,8 +10,12 @@ ANCHOR_LOW = 30              # 가장 낮게. 이 사이에서 클릭한 높이�
 
 GRAVITY = 1500.0
 
-FONT_UI = 'C:/Windows/Fonts/malgunbd.ttf'
-FONT_TITLE = 'C:/Windows/Fonts/HANBatangB.ttf'
+# 글꼴: 갈무리 픽셀 글꼴 (resource/fonts/, SIL OFL 1.1 - Galmuri-OFL.txt)
+# 픽셀 글꼴은 제 크기의 정수배일 때만 또렷하다. 그래서 글자 크기를 아래 (기본 크기: 파일) 중
+# 정수배가 가장 가까운 것으로 맞춘다 (render.text). 예: 16 → 갈무리14 14px, 20 → 갈무리11 22px
+PIXEL_FONTS = {11: 'resource/fonts/Galmuri11-Bold.ttf', 14: 'resource/fonts/Galmuri14.ttf'}
+FONT_UI = PIXEL_FONTS[11]
+FONT_TITLE = PIXEL_FONTS[11]
 
 # 오브젝트 레이어
 LAYER_BUILDING, LAYER_GIANT, LAYER_ALLY, LAYER_PLAYER, LAYER_PROJECTILE, LAYER_EFFECT = range(6)
@@ -20,17 +24,19 @@ LAYER_BUILDING, LAYER_GIANT, LAYER_ALLY, LAYER_PLAYER, LAYER_PROJECTILE, LAYER_E
 #   bg: 배경 그림 번호 (sky_N / far_N / mid_N), prop: 와이어 지점 그림, fx: 떠다니는 입자 움직임
 #   rim · skin · particle · fog: 림 라이트, 거인 피부, 입자, 안개 색
 #   gap: 와이어 지점 간격, kind: 처음부터 서 있는 거인 종류, boss: 처음 들어가면 요새에서 나오는 보스
+#   boss_at: 있으면 보스가 요새가 아니라, 주인공이 구간의 이 비율만큼 들어갔을 때 화면 오른쪽 바깥에서 나온다
 #   story: 처음 들어갈 때 띄우는 한 줄, rest: 쉬어 가는 구간 (가스가 빨리 찬다)
-ZONES = [
+ALL_ZONES = [
     dict(name='벽 밖 들판', bg=1, prop='pine', fx='dust', shafts=True,
          rim=(225, 232, 234), skin=(232, 222, 205), particle=(245, 245, 245), fog=(205, 214, 214),
-         gap=(430, 620), kind='erratic', story='성문이 열렸다. 넓은 들판 너머, 거인들이 걸어온다'),
+         gap=(430, 620), kind='erratic', boss='melon', boss_at=0.8,
+         story='성문이 열렸다. 넓은 들판 너머, 거인들이 걸어온다'),
     dict(name='거목의 숲', bg=2, prop='bigtree', fx='firefly', shafts=True,
          rim=(170, 225, 140), skin=(176, 196, 168), particle=(200, 255, 120), fog=(80, 120, 92),
          gap=(190, 290), kind='normal', boss='smart', story='건물만 한 나무 사이를 날아라. 영리한 거인이 뒤쫓는다'),
     dict(name='달밤의 고성', bg=3, prop='tower', fx='cold', moon=True,
          rim=(150, 182, 255), skin=(170, 180, 214), particle=(190, 210, 255), fog=(80, 96, 140),
-         gap=(290, 400), kind='climber', boss='thrower', story='무너진 성에 갇혔다. 성벽을 타고 거인이 오른다'),
+         gap=(290, 400), kind='climber', story='무너진 성에 갇혔다. 성벽을 타고 거인이 오른다'),
     dict(name='무너진 벽 아래', bg=6, prop='pillar', fx='dust',
          rim=(236, 230, 214), skin=(228, 214, 196), particle=(240, 236, 226), fog=(196, 204, 212),
          gap=(320, 460), kind='armed', story='벽이 뚫렸다. 단단한 거인이 무너진 틈으로 들어온다'),
@@ -50,7 +56,11 @@ ZONES = [
          rim=(226, 196, 160), skin=(200, 180, 160), particle=(220, 200, 170), fog=(150, 128, 104),
          gap=(260, 360), kind='armed', story='끝없이 행진하는 거인 무리 너머, 요새를 함락하라'),
 ]
+# 지금 쓰는 구간 (ALL_ZONES 번호). 맵 길이를 고르게 나눠 갖는다. 나머지 구간은 나중에 다시 넣는다
+ZONE_PICK = [0, 1]           # 벽 밖 들판, 거목의 숲
+ZONES = [ALL_ZONES[i] for i in ZONE_PICK]
 ZONE_COUNT = len(ZONES)
+ZONE_W = MAP_LEN // ZONE_COUNT   # 구간 하나의 길이
 MAP_W = ZONE_W * ZONE_COUNT
 WALL_X = 150                 # 우리 벽 오른쪽 면
 FORTRESS_X = MAP_W - 310     # 적 요새 왼쪽 면

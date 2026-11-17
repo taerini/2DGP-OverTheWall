@@ -91,12 +91,52 @@ GIANTS = {
             ('run',   'run',     [0, 1, 2, 3, 4, 5, 6, 7]),
         ],
         lying={7}, lying_nape=(-13, -12), lying_from='right', blend={6: (5, 7)}),
+    # 수박 거인 (1구간 보스): 귀여운 수박 머리에 덩굴 몸. 프레임 캔버스가 120 이라 모든 프레임을 발 기준선에 붙인다.
+    # 약점(목덜미)은 수박과 덩굴 줄기가 이어지는 목. inhale(숨 들이켜기) · spit(씨 뱉기) 줄은 수박 거인만 쓴다
+    'melon': dict(
+        src='giant_melon_src', out='giant_melon', height=82.0, ground_all=True,
+        head_box=(36, 26, 86, 72), nape_pt=(63, 75),
+        rows=[
+            ('walk',   'walk',   [0, 1, 2, 3, 4, 5, 6, 7]),
+            ('grab',   'spit',   [2, 3, 4, 5]),              # 가까이 붙으면 머리로 들이받기 (뱉는 동작으로)
+            ('kneel',  'kneel',  [0, 1, 2, 3]),
+            ('death',  'death',  [0, 1, 2, 3, 4, 5, 6, 7]),  # 앞으로 넘어져 수박이 옆으로 구른다
+            ('guard',  'walk',   [0, 0]),
+            ('run',    'walk',   [0, 1, 2, 3, 4, 5, 6, 7]),
+            ('inhale', 'inhale', [0, 1, 2, 3, 4, 5]),
+            ('spit',   'spit',   [2, 3, 4, 5]),              # 0·1번 장은 얼굴 쪽이 일자로 납작하게 그려져서 뺀다
+            ('jump',   'jump',   [0, 1, 2, 3, 4, 5, 6, 7]),  # 무릎 굽히기 → 뛰어오름 → 공중에서 다리 접기 → 내려옴
+            ('crouch', 'fold:walk:0', [6, 12, 18, 22]),     # 몸을 숙임: 덩굴 다리만 접고 수박은 그대로 내린다 (숫자 = 내려간 높이)
+        ],
+        raw_rows={'jump': 102},                          # 점프 줄은 땅에 붙이지 않고 그림 속 높이 그대로 (102 = 서 있을 때 발바닥)
+        lying={5, 6, 7}, lying_nape=(26, 32), blend={4: (3, 5)},
+        clear_puff={'grab', 'spit'}),    # 입 앞으로 나오는 밝은 바람 덩어리만 지운다 (씨는 게임에서 따로 날린다)
 }
 GROUND_ROWS = {'death'}          # 바닥에 붙여 놓을 줄 (떠 있는 프레임을 내려서 무너지듯 쓰러지게)
 
 
 def frame(src, folder, i):
+    if folder.startswith('fold:'):
+        _, base, n = folder.split(':')
+        return fold_legs(frame(src, base, int(n)), i)
     return Image.open(os.path.join(OUT, src, folder, 'west', 'frame_%03d.png' % i)).convert('RGBA')
+
+
+NECK_Y = 74      # 수박 거인: 서 있는 그림에서 수박과 덩굴 몸이 나뉘는 높이 (그림 px)
+
+
+def fold_legs(im, drop):
+    """수박 거인이 몸을 숙인 그림: 목 아래 덩굴 다리만 세로로 접고(줄이고), 수박은 모양 그대로 그만큼 내린다"""
+    bb = im.getbbox()
+    feet = bb[3]
+    head = im.crop((0, 0, im.width, NECK_Y))
+    legs = im.crop((0, NECK_Y, im.width, feet))
+    h = max(2, legs.height - drop)
+    legs = legs.resize((legs.width, h), Image.NEAREST)
+    out = Image.new('RGBA', im.size, (0, 0, 0, 0))
+    out.alpha_composite(legs, (0, feet - h))
+    out.alpha_composite(head, (0, drop))
+    return out
 
 
 def find_head(arr, tmpl):
@@ -104,8 +144,8 @@ def find_head(arr, tmpl):
     th, tw = tmpl.shape[:2]
     ta = tmpl[..., 3:] / 255.0
     best, pos = None, (0, 0)
-    for y in range(0, SRC_N - th + 1):
-        for x in range(0, SRC_N - tw + 1):
+    for y in range(0, arr.shape[0] - th + 1):
+        for x in range(0, arr.shape[1] - tw + 1):
             win = arr[y:y + th, x:x + tw]
             d = (np.abs(win[..., :3] - tmpl[..., :3]) * ta).sum() + np.abs(win[..., 3] - tmpl[..., 3]).sum()
             if best is None or d < best:
@@ -125,9 +165,21 @@ def build(g):
         napes = []
         for c, i in enumerate(picks):
             im = frame(src, folder, i)
+            if name in g.get('clear_puff', ()):
+                a = np.asarray(im).copy()
+                rgb = a[..., :3].astype(int)
+                puff = (rgb.min(axis=2) > 185) & (np.ptp(rgb, axis=2) < 60)   # 밝고 채도 낮은 크림색
+                a[puff] = 0
+                im = Image.fromarray(a, 'RGBA')
             bb = im.getbbox()
-            oy = OY + (FOOT - bb[3] if name in GROUND_ROWS else 0)
-            sheet.alpha_composite(im, (c * CELL + OX, r * CELL + oy))
+            ox = (CELL - im.width) // 2              # 캔버스 크기가 달라도(124 / 120 / 88) 칸 가운데에
+            if name in g.get('raw_rows', {}):
+                oy = CELL - BASE - g['raw_rows'][name]
+            elif g.get('ground_all'):
+                oy = CELL - BASE - bb[3]               # 모든 프레임의 그림 맨 아래를 발 기준선에
+            else:
+                oy = OY + (FOOT - bb[3] if name in GROUND_ROWS else 0)
+            sheet.alpha_composite(im, (c * CELL + ox, r * CELL + oy))
             if name == 'death' and i in g['lying'] and g.get('lying_from') == 'right':
                 # 머리가 오른쪽에 누운 그림: 그림 오른쪽 아래에서 잰다
                 nx, ny = bb[2] + g['lying_nape'][0], bb[3] + g['lying_nape'][1]
@@ -137,7 +189,7 @@ def build(g):
                 hx, hy = find_head(np.asarray(im, dtype=float), tmpl)
                 nx, ny = g['nape_pt'][0] + hx - x0, g['nape_pt'][1] + hy - y0
             # 칸 가운데에서 x, 발 기준선에서 위로 y (그림 단위)
-            napes.append([float(nx + OX - CELL / 2), float(CELL - BASE - (ny + oy))])
+            napes.append([float(nx + ox - CELL / 2), float(CELL - BASE - (ny + oy))])
         meta['nape'][name] = napes
     d = meta['nape']['death']
     for k, (a, b) in g['blend'].items():
