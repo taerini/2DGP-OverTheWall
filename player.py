@@ -17,6 +17,10 @@ FRAMES = {row: 8 for row in ROWS}   # PixelLab 주인공 시트(hero_px.png): �
 WALK_SPEED = 130.0
 RUN_MAX = 440.0
 GAS_MAX = 100.0
+START_HP = 100.0             # 처음 체력 (생명은 하나뿐). 게이지로 보이고 버티는 동안 천천히 다시 찬다
+HIT_DMG = 10.0               # 거인 공격 한 번(세기 1)에 깎이는 체력
+REGEN = 1.5                  # 초당 다시 차는 체력
+REGEN_DELAY = 3.0            # 마지막으로 맞은 뒤 이만큼 지나야 차기 시작한다
 WIRE_COST = 6.0
 HOOK_SPEED = 3400.0
 REEL_SPEED = 780.0
@@ -203,8 +207,10 @@ class Player:
         self.anim_t = 0.0
 
         # 강화로 바뀌는 값
-        self.max_hp = 3
-        self.hp = 3
+        self.max_hp = START_HP
+        self.hp = START_HP
+        self.dead = False             # 생명은 하나뿐: 체력이 다하면 그대로 끝
+        self.safe_t = 0.0             # 마지막으로 맞은 뒤 지난 시간 (체력이 다시 차는 조건)
         self.gas_max = GAS_MAX
         self.gas = GAS_MAX
         self.blade = 1.0
@@ -322,8 +328,10 @@ class Player:
     def hurt(self, src_x, n=1):
         if self.invuln > 0:
             return
-        self.hp -= n
-        self.invuln = 1.4
+        dmg = n * HIT_DMG
+        self.hp = max(0.0, self.hp - dmg)
+        self.safe_t = 0.0
+        self.invuln = 1.0
         self.hit_t = 0.45
         self.action = None
         camera.shake(0.25)
@@ -333,18 +341,14 @@ class Player:
         self.state_machine.handle_event(('FALL', None))
         effect.add(effect.FloatText(self.x, self.y + 50, f'-{n}', (255, 110, 90), 18 + 4 * (n - 1)))
         if self.hp <= 0:
-            self.respawn()
+            self.die()
 
-    def respawn(self):
+    def die(self):
+        """생명은 하나뿐이다. 다시 살아나지 않고 쓰러진 채 게임이 끝난다."""
+        self.hp = 0
+        self.dead = True
+        self.invuln = 99.0            # 쓰러진 뒤에는 더 맞지 않는다
         play_mode.on_player_down()
-        self.hp = self.max_hp
-        self.gas = self.gas_max
-        self.x, self.y = WALL_X + 70.0, LANE_Y[0] + 1.0
-        self.vx = self.vy = 0.0
-        self.invuln = 2.2
-        self.hit_t = 0.0
-        self.state_machine.handle_event(('FALL', None))
-        camera.reset(self.x)
 
     # ------------------------------------------------ 갱신
     def update(self, dt):
@@ -353,6 +357,10 @@ class Player:
             self.cool[k] = max(0.0, self.cool[k] - dt)
         self.invuln = max(0.0, self.invuln - dt)
         self.hit_t = max(0.0, self.hit_t - dt)
+        # 맞지 않고 버티는 동안 체력이 천천히 다시 찬다
+        self.safe_t += dt
+        if not self.dead and self.safe_t >= REGEN_DELAY:
+            self.hp = min(self.max_hp, self.hp + REGEN * dt)
         self.no_gas_t = max(0.0, self.no_gas_t - dt)
         if self.action:
             self.action_t -= dt
@@ -371,6 +379,8 @@ class Player:
     # ------------------------------------------------ 그리기
     def pick_frame(self):
         st = self.state_machine.cur_state
+        if self.dead:
+            return 'hit', 7, 0.0          # 쓰러진 자세 그대로
         if st is self.TORNADO:
             return 'spinE', int(self.anim_t * 30) % 8, 0.0
         if self.hit_t > 0:
@@ -417,7 +427,7 @@ class Player:
         row, frame, rad = self.pick_frame()
         sx, sy = camera.to_screen(self.x, self.y)
         r = ROWS.index(row)
-        alpha = 0.35 if self.invuln > 0 and int(self.invuln * 12) % 2 else 1.0
+        alpha = 0.35 if self.invuln > 0 and not self.dead and int(self.invuln * 12) % 2 else 1.0
         self.image.opacify(alpha)
         flip = '' if self.face > 0 else 'h'
         self.image.clip_composite_draw(frame * CELL, (len(ROWS) - 1 - r) * CELL, CELL, CELL,

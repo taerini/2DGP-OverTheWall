@@ -6,15 +6,16 @@ import title_mode
 from config import *
 
 win = False
+reason = 'wall'          # 졌을 때 이유: 'wall' 벽이 무너짐, 'dead' 주인공이 쓰러짐
 kills = 0
 upgrades = 0
 seconds = 0.0
 t = 0.0
 
 
-def set_result(victory, k, u, s):
-    global win, kills, upgrades, seconds
-    win, kills, upgrades, seconds = victory, k, u, s
+def set_result(victory, k, u, s, why='wall'):
+    global win, kills, upgrades, seconds, reason
+    win, kills, upgrades, seconds, reason = victory, k, u, s, why
 
 
 def init():
@@ -54,8 +55,12 @@ def draw():
     sky.opacify(1.0)
     sky.draw_to_origin(0, 0, SCREEN_W, SCREEN_H)
     a = min(1.0, t)
-    title = '적 요새 함락' if win else '벽이 무너졌다'
-    sub = '거인의 근원을 끊어냈다.' if win else '거인이 벽 안으로 쏟아져 들어온다…'
+    if win:
+        title, sub = '적 요새 함락', '거인의 근원을 끊어냈다.'
+    elif reason == 'dead':
+        title, sub = '쓰러졌다', '다시 일어나지 못했다…'
+    else:
+        title, sub = '벽이 무너졌다', '거인이 벽 안으로 쏟아져 들어온다…'
     render.text(title, SCREEN_W / 2, 480, 60, (245, 236, 220) if win else (240, 150, 130), 'center', FONT_TITLE, a)
     render.text(sub, SCREEN_W / 2, 410, 20, (210, 210, 210), 'center', alpha=a)
     s = int(seconds)

@@ -89,8 +89,13 @@ def neck_juice(g, dmg, killed, face, big=True):
 
 
 def on_player_down():
-    wall.damage(15)
-    hud.show_message('쓰러졌다! 우리 벽에서 재출격 (벽 내구도 -15)', 3.0)
+    """주인공이 쓰러졌다: 생명은 하나뿐이라 그대로 패배"""
+    global end_t
+    if end_t is None:
+        end_t = 2.0
+        camera.shake(0.6)
+        hud.show_message('쓰러졌다…', 2.0)
+        result_mode.set_result(False, kills, upgrades_taken, play_time, 'dead')
 
 
 # ------------------------------------------------ 거인 생성
@@ -239,6 +244,8 @@ def handle_events():
         elif event.type == SDL_KEYDOWN:
             if event.key == SDLK_ESCAPE:
                 game_framework.change_mode(title_mode)
+            elif player.dead:
+                pass                                   # 쓰러진 뒤에는 조작하지 않는다
             elif event.key == SDLK_q:
                 player.slash()
             elif event.key == SDLK_w:
@@ -247,7 +254,7 @@ def handle_events():
             player.mouse = (event.x, SCREEN_H - 1 - event.y)
         elif event.type == SDL_MOUSEBUTTONDOWN and event.button == SDL_BUTTON_LEFT:
             player.mouse = (event.x, SCREEN_H - 1 - event.y)
-            if end_t is None:
+            if end_t is None and not player.dead:
                 player.fire_wire(*player.mouse)
 
 
