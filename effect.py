@@ -33,6 +33,43 @@ class Puff:
         render.untint(self.img)
 
 
+class Wind:
+    """픽셀 바람 덩어리 (resource/wind_px.png, tools/make_wind_px.py). 날아가며 느려지고, 흩어지는 단계 그림으로 바뀐다."""
+    CELL, FRAMES, SIZES = 28, 4, 4
+    SCALE = 3                       # 배경 그림과 같은 픽셀 크기
+
+    def __init__(self, x, y, vx, size, life=0.6, vy=0.0):
+        self.img = render.image('wind_px.png', pixel=True)
+        self.x, self.y, self.vx, self.vy = x, y, vx, vy
+        self.size = max(0, min(self.SIZES - 1, size))
+        self.life = life
+        self.t = 0.0
+
+    def update(self, dt):
+        self.t += dt
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.vx *= max(0.0, 1 - 2.2 * dt)     # 공기 저항으로 점점 느려진다
+        if self.t >= self.life:
+            game_world.remove_object(self)
+
+    def draw(self):
+        k = self.t / self.life
+        f = min(self.FRAMES - 1, int(k * self.FRAMES))
+        c, w = self.CELL, self.CELL * self.SCALE
+        sx, sy = camera.to_screen(self.x, self.y)
+        self.img.clip_composite_draw(f * c, (self.SIZES - 1 - self.size) * c, c, c, 0,
+                                     '' if self.vx >= 0 else 'h', round(sx), round(sy), w, w)
+
+
+def wind(x, y, d, n=1, sizes=(0, 1, 1, 2, 2, 3), speed=(420, 700), spread=26):
+    """d 쪽으로 부는 바람 덩어리 n 개. 크기는 sizes 에서 고른다 (작은 것이 더 자주 나오게)"""
+    for _ in range(n):
+        game_world.add_object(Wind(x + random.uniform(-10, 10), y + random.uniform(-spread, spread),
+                                   d * random.uniform(*speed), random.choice(sizes),
+                                   random.uniform(0.45, 0.75), random.uniform(-20, 25)), LAYER_EFFECT)
+
+
 def steam(x, y, n=6, spread=30, color=(240, 240, 240), size=34):
     for _ in range(n):
         game_world.add_object(Puff(x + random.uniform(-spread, spread), y + random.uniform(-spread / 2, spread / 2),

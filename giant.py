@@ -107,7 +107,7 @@ DMG_SPREAD = (0.85, 1.15)    # 벨 때마다 피해가 이 범위에서 흔들�
 CRIT_RATE = 0.2
 CRIT_MULT = 1.5
 HP_BY_SIZE = {1: 110, 2: 175, 3: 245, 4: 320, 5: 400}
-# 수박 거인: 숨을 들이켜고(입 크게 벌림) → '후!!!!' 하며 수박씨를 가로로 곧게 뱉는다.
+# 수박 거인: 숨을 들이켜고(입 크게 벌림) → 수박씨를 가로로 곧게 뱉는다.
 # 주인공이 있는 층을 노린다: 5층은 점프, 4층은 선 채로, 3층은 쭈그려, 2층은 엎드려서. 1층(발밑)은 안전하다
 MELON_INHALE = 0.8       # 숨 들이켜는 시간 (노린 층에 빨간 띠로 예고)
 MELON_SPIT = 2.0         # 씨를 뱉는 시간
@@ -337,11 +337,21 @@ class Giant:
         if self.state == 'inhale':
             if self.state_t <= 0:
                 self.state, self.state_t = 'spit', MELON_SPIT
-                mx, my = self.mouth()
-                effect.add(effect.FloatText(mx + self.dir * 30, my + 50, '후!!!!', (255, 250, 240), 44))
                 camera.shake(0.15, 5)
+                # 처음 내뿜는 순간: 입 앞으로 바람 덩어리가 한꺼번에 확 나온다 (큰 것 조금, 작은 것 여럿)
+                mx, my = self.mouth()
+                effect.wind(mx + self.dir * 20, my, self.dir, 7, sizes=(1, 2, 2, 3), speed=(500, 800), spread=30)
+                self.wind_n = 0
             return
         if self.state == 'spit':
+            # 뱉는 동안에도 바람이 계속 새어 나온다. 처음엔 자주·크게, 갈수록 드문드문·작게
+            t = MELON_SPIT - self.state_t
+            due = int(t * 9 - t * t * 1.5)
+            while self.wind_n < due:
+                self.wind_n += 1
+                mx, my = self.mouth()
+                effect.wind(mx + self.dir * 16, my, self.dir, 1,
+                            sizes=(0, 1, 1, 2) if t < 1.0 else (0, 0, 1), spread=20)
             # 2초 동안 고르게 나눠 뱉는다
             due = MELON_SEEDS - int(self.state_t / MELON_SPIT * MELON_SEEDS)
             while MELON_SEEDS - self.seeds_left < min(MELON_SEEDS, due):
