@@ -4,7 +4,7 @@ import game_world
 import play_mode
 from ally import Levi, Mikasa
 from cannon import Cannon, CartCannon
-from config import LAYER_ALLY, LAYER_BUILDING
+from config import LAYER_ALLY, LAYER_BUILDING, DEMO_CARDS
 
 
 def blade(p):
@@ -106,15 +106,25 @@ UPGRADES = [
 ]
 
 taken = {}
+rolls = 0           # 이번 판에 카드를 몇 번 뽑았나
 
 
 def reset():
+    global rolls
     taken.clear()
+    rolls = 0
 
 
 def roll():
+    """카드 3장. 시연용으로 DEMO_CARDS 에 정해 둔 카드는 그 차례에 반드시 끼워 넣는다"""
+    global rolls
     pool = [u for u in UPGRADES if taken.get(u[0], 0) < u[3] and (u[4] is None or u[4]())]
-    return random.sample(pool, min(3, len(pool)))
+    must = [u for u in pool if rolls < len(DEMO_CARDS) and u[0] == DEMO_CARDS[rolls]]
+    rolls += 1
+    rest = [u for u in pool if u not in must]
+    picks = must + random.sample(rest, min(3 - len(must), len(rest)))
+    random.shuffle(picks)
+    return picks
 
 
 def apply(u):
