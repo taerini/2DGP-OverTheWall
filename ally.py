@@ -6,7 +6,9 @@ import effect
 import play_mode
 import render
 from config import *
-from player import CELL, BASE, ROWS, ATTACK
+from player import ROWS, ATTACK
+
+BASE = 8                    # 칸 아래에서 발바닥까지 (64칸·96칸 시트 모두)
 
 SPEED = 520.0
 ALLY_HP = 6
@@ -26,9 +28,15 @@ class Ally:
     FORT_CD = 1.6
     SHEET = 'ally1.png'      # 초록 망토
     SIZE = SCALE             # 그리는 크기 (주인공 = 1.0)
+    # 시트 형식: 예전 그림(ally1~3)은 64칸·줄마다 4프레임, 픽셀 그림(tools/make_hero_px.py)은 96칸·8프레임
+    CELL = 64                # 시트 칸 크기
+    DRAW_CELL = 64           # 크기 1.0 일 때 화면에 그리는 칸 크기 (주인공 픽셀 시트는 96칸을 72로 그린다)
+    FRAMES = 4
+    AIR_FRAME = 1            # 가만히 떠 있을 때 쓰는 air 줄 프레임
+    PIXEL = False
 
     def __init__(self, index):
-        self.image = render.image(self.SHEET)
+        self.image = render.image(self.SHEET, pixel=self.PIXEL)
         self.index = index
         p = play_mode.player
         self.x, self.y = p.x - 40, p.y + 60
@@ -152,22 +160,24 @@ class Ally:
         if not camera.visible(self.x - 40, self.x + 40):
             return
         rad = 0.0
+        n = self.FRAMES
         if self.slash_t > 0:
-            row, fr = 'slashQ', min(3, int((0.26 - self.slash_t) / 0.065))
+            row, fr = 'slashQ', min(n - 1, int((0.26 - self.slash_t) / 0.26 * n))
         elif math.hypot(self.vx, self.vy) > 120:
-            row, fr = 'wire', int(self.anim_t * 14) % 4
+            row, fr = 'wire', int(self.anim_t * 14 * n / 4) % n
             rad = max(-0.9, min(0.9, math.atan2(self.vy, max(1.0, self.vx * self.face))))
         else:
-            row, fr = 'air', 1
+            row, fr = 'air', self.AIR_FRAME
         r = ROWS.index(row)
         alpha = 0.4 if not self.alive() or (self.invuln > 0 and int(self.invuln * 12) % 2) else 1.0
         # 리바이는 작게, 미카사는 빨간 목도리, 아르민은 노란 단발
         size = self.SIZE
+        cell, w = self.CELL, self.DRAW_CELL * size
         self.image.opacify(alpha)
         sx, sy = camera.to_screen(self.x, self.y)
-        self.image.clip_composite_draw(fr * CELL, (len(ROWS) - 1 - r) * CELL, CELL, CELL, rad * self.face,
-                                       '' if self.face > 0 else 'h', sx, sy + (CELL / 2 - BASE) * size,
-                                       CELL * size, CELL * size)
+        self.image.clip_composite_draw(fr * cell, (len(ROWS) - 1 - r) * cell, cell, cell, rad * self.face,
+                                       '' if self.face > 0 else 'h', sx, sy + (cell / 2 - BASE) * w / cell,
+                                       w, w)
         self.image.opacify(1.0)
         top = sy + 12 + 33 * size / SCALE    # 머리 위 (크기에 맞춰 체력바·이름을 내린다)
         if not self.alive():
@@ -184,6 +194,8 @@ class Levi(Ally):
     COLOR = (160, 195, 255)
     NAME = '리바이'
     SIZE = SCALE * 2 / 3     # 작은 몸집
+    SHEET = 'ally_hood_px.png'   # 후드를 깊게 눌러써 얼굴이 그늘에 가려진 작은 동료 (픽셀)
+    CELL, DRAW_CELL, FRAMES, AIR_FRAME, PIXEL = 96, 72, 8, 0, False   # 주인공처럼 줄여 그려서 부드럽게
     COOLDOWN = 1.6
     POWER = 1.0
 
@@ -218,7 +230,8 @@ class Armin(Levi):
     COLOR = (200, 210, 170)
     NAME = '아르민'
     SIZE = SCALE             # 리바이를 물려받지만 크기는 보통 (미카사와 같다)
-    SHEET = 'ally3.png'      # 노란 단발머리 + 초록 망토
+    SHEET = 'ally3.png'      # 노란 단발머리 + 초록 망토 (아직 예전 그림)
+    CELL, DRAW_CELL, FRAMES, AIR_FRAME, PIXEL = 64, 64, 4, 1, False
     COOLDOWN = 2.2
     POWER = 0.5
     FORT_DMG = 5.0
@@ -229,7 +242,8 @@ class Mikasa(Ally):
     """거인들의 목 높이로 앞으로 쭉 돌진하며 지나가는 거인을 우르르 벤다. 공격력 70%, 최대 3마리."""
     COLOR = (255, 175, 165)
     NAME = '미카사'
-    SHEET = 'ally2.png'        # 초록 망토 대신 빨간 목도리
+    SHEET = 'ally_red_px.png'  # 초록 후드 망토 안에 빨간 목도리 (픽셀)
+    CELL, DRAW_CELL, FRAMES, AIR_FRAME, PIXEL = 96, 72, 8, 0, False   # 주인공처럼 줄여 그려서 부드럽게
     COOLDOWN = 3.5
     DASH_SPEED = 1150.0
     DASH_LEN = 650.0

@@ -9,9 +9,10 @@ from config import *
 from giant import floor_of
 from state_machine import StateMachine, wire_fire, arrive, fall, land, tornado
 
-CELL, BASE = 64, 8
+CELL, BASE = 96, 8
+DRAW = 72                    # 화면에 그리는 칸 크기 (96칸을 줄여 키를 약 48px 로 맞춤)
 ROWS = ['idle', 'run', 'wire', 'air', 'slashQ', 'slashW', 'spinE', 'hit']
-FRAMES = {'idle': 4, 'run': 6, 'wire': 4, 'air': 2, 'slashQ': 4, 'slashW': 4, 'spinE': 6, 'hit': 3}
+FRAMES = {row: 8 for row in ROWS}   # PixelLab 주인공 시트(hero_px.png): 줄마다 8프레임. air 는 0~3 상승, 4~7 하강
 
 WALK_SPEED = 130.0
 RUN_MAX = 440.0
@@ -189,7 +190,7 @@ class Tornado:
 
 class Player:
     def __init__(self):
-        self.image = render.image('hero.png')
+        self.image = render.image('hero_px.png')
         self.ring = render.image('ring_dash.png')
         self.x, self.y = WALL_X + 70.0, float(LANE_Y[0])
         self.vx = self.vy = 0.0
@@ -371,22 +372,25 @@ class Player:
     def pick_frame(self):
         st = self.state_machine.cur_state
         if st is self.TORNADO:
-            return 'spinE', int(self.anim_t * 22) % 6, 0.0
+            return 'spinE', int(self.anim_t * 30) % 8, 0.0
         if self.hit_t > 0:
-            return 'hit', min(2, int((0.45 - self.hit_t) / 0.15)), 0.0
+            return 'hit', min(7, int((0.45 - self.hit_t) / 0.45 * 8)), 0.0
         if self.action:
-            row = {'Q': 'slashQ', 'W': 'slashW'}[self.action]
             k = 1 - self.action_t / Q_TIME
+            if st is self.AIR or st is self.WIRE:
+                # 공중(와이어로 나는 중 포함): 몸을 한 바퀴 돌리며 벤다. 끝나면 다시 날기 자세로 (속도는 그대로)
+                return 'spinE', min(7, int(k * 8)), 0.0
+            row = {'Q': 'slashQ', 'W': 'slashW'}[self.action]
             return row, min(FRAMES[row] - 1, int(k * FRAMES[row])), 0.0
         if st is self.WIRE and self.reeling:
             vx, vy = self.vx * self.face, self.vy
             rad = max(-0.9, min(0.9, math.atan2(vy, max(1.0, vx)) - 0.05))
-            return 'wire', int(self.anim_t * 14) % 4, rad
+            return 'wire', int(self.anim_t * 20) % 8, rad
         if st is self.AIR or st is self.WIRE:
-            return 'air', 0 if self.vy > 0 else 1, 0.0
+            return 'air', (0 if self.vy > 0 else 4) + int(self.anim_t * 12) % 4, 0.0
         if abs(self.vx) > 25:
-            return 'run', int(self.anim_t * (6 + abs(self.vx) / 30)) % 6, 0.0
-        return 'idle', int(self.anim_t * 5) % 4, 0.0
+            return 'run', int(self.anim_t * (8 + abs(self.vx) / 22)) % 8, 0.0
+        return 'idle', int(self.anim_t * 8) % 8, 0.0
 
     def draw(self):
         cx, cy = self.center()
@@ -417,7 +421,7 @@ class Player:
         self.image.opacify(alpha)
         flip = '' if self.face > 0 else 'h'
         self.image.clip_composite_draw(frame * CELL, (len(ROWS) - 1 - r) * CELL, CELL, CELL,
-                                       rad * self.face, flip, sx, sy + CELL / 2 - BASE, CELL, CELL)
+                                       rad * self.face, flip, sx, sy + (CELL / 2 - BASE) * DRAW / CELL, DRAW, DRAW)
         self.image.opacify(1.0)
 
         # 머리 위 작은 가스 바 (와이어에만 쓰인다)
