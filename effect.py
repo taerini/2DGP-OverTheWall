@@ -35,7 +35,7 @@ class Puff:
 
 class Wind:
     """픽셀 바람 덩어리 (resource/wind_px.png, tools/make_wind_px.py). 날아가며 느려지고, 흩어지는 단계 그림으로 바뀐다."""
-    CELL, FRAMES, SIZES = 28, 4, 4
+    CELL_W, CELL_H, FRAMES, SIZES = 44, 20, 4, 4
     SCALE = 3                       # 배경 그림과 같은 픽셀 크기
 
     def __init__(self, x, y, vx, size, life=0.6, vy=0.0):
@@ -56,10 +56,11 @@ class Wind:
     def draw(self):
         k = self.t / self.life
         f = min(self.FRAMES - 1, int(k * self.FRAMES))
-        c, w = self.CELL, self.CELL * self.SCALE
+        cw, ch = self.CELL_W, self.CELL_H
         sx, sy = camera.to_screen(self.x, self.y)
-        self.img.clip_composite_draw(f * c, (self.SIZES - 1 - self.size) * c, c, c, 0,
-                                     '' if self.vx >= 0 else 'h', round(sx), round(sy), w, w)
+        self.img.clip_composite_draw(f * cw, (self.SIZES - 1 - self.size) * ch, cw, ch, 0,
+                                     '' if self.vx >= 0 else 'h', round(sx), round(sy),
+                                     cw * self.SCALE, ch * self.SCALE)
 
 
 def wind(x, y, d, n=1, sizes=(0, 1, 1, 2, 2, 3), speed=(420, 700), spread=26):
