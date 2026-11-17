@@ -4,6 +4,7 @@ import camera
 import game_framework
 import play_mode
 import render
+import sound
 from background import Background
 from config import *
 
@@ -16,6 +17,7 @@ def init():
     background = Background()
     camera.reset(SCREEN_W * 0.42 + 700)
     t = 0.0
+    sound.play_bgm('title')     # 차분하지만 불안한 곡. 플레이에 들어가도 끊지 않고 이어서 흐른다
 
 
 def finish():
