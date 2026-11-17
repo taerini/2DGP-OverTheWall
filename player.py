@@ -27,7 +27,7 @@ REEL_SPEED = 780.0
 ATTACK = 40.0                # 처음 공격력 (칼날 강화로 오른다). 목덜미 100%, 발목 30%, 몸통 15%
 Q_COOLDOWN = 0.35
 Q_TIME = 0.26
-TORNADO_CD = 6.0
+TORNADO_CD = Q_COOLDOWN   # 회오리도 Q 처럼 제한 없이 쓴다
 TORNADO_RISE = 0.4
 FORT_DAMAGE = 6.0            # 혼자 요새를 베면 오래 걸린다
 PART_ORDER = {'neck': 0, 'ankle': 1, 'body': 2}
@@ -309,15 +309,19 @@ class Player:
             play_mode.fortress.damage(FORT_DAMAGE * self.blade, self.x + 20, self.y + 18)
 
     def tornado(self):
-        """W: 가까운 거인의 목 높이까지 회오리처럼 솟아올라 목덜미를 벤다."""
+        """W: 거인 발목 앞(같은 줄 땅 위)에 있을 때만, 그 거인의 목 높이까지 회오리처럼 솟아올라 목덜미를 벤다."""
         if not self.has_tornado or self.cool['W'] > 0 or self.state_machine.cur_state is self.TORNADO:
             return
+        if self.lane is None:            # 공중·와이어 중에는 못 쓴다
+            return
+        floor = self.floor()
         best, best_d = None, 1e9
         for g in play_mode.giants():
-            if g.alive() and g.lane is not None:
-                d = abs(g.x - self.x)
-                if d <= g.reach_x() + 70 and d < best_d:
-                    best, best_d = g, d
+            if not g.alive() or g.part_for(floor) != 'ankle':
+                continue
+            d = abs(g.x - self.x)
+            if d <= g.reach_x() + SLASH_REACH and d < best_d:
+                best, best_d = g, d
         if best is None:
             return
         self.cool['W'] = self.tornado_cd

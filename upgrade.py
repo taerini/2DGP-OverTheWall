@@ -71,17 +71,9 @@ def tornado(p):
     p.has_tornado = True
 
 
-def tornado_up(p):
-    p.tornado_cd *= 0.7
-
-
 def bandage(p):
     p.max_hp += 10
     p.hp = p.max_hp
-
-
-def has_tornado():
-    return play_mode.player.has_tornado
 
 
 def has_allies():
@@ -109,8 +101,7 @@ UPGRADES = [
     ('성 대포', '우리 벽 위에 대포 1문. 벽에 가까운 거인을 자동 포격', cannon, 4, None),
     ('수레 대포', '전장으로 밀고 나가 거인을 쏘고, 끝내 적 요새를 포격한다', cart, 3, None),
     ('벽 보수', '우리 벽 내구도 +35', repair, 99, None),
-    ('회오리 베기 (W)', '가까운 거인의 목 높이까지 회오리처럼 솟아올라 목덜미를 벤다', tornado, 1, None),
-    ('회오리 연마', '회오리 베기 재사용 시간 -30%', tornado_up, 2, has_tornado),
+    ('회오리 베기 (W)', '거인 발목 앞에서 목 높이까지 회오리처럼 솟아올라 목덜미를 벤다', tornado, 1, None),
     ('붕대', '체력 모두 회복, 최대 체력 +10', bandage, 2, None),
 ]
 
