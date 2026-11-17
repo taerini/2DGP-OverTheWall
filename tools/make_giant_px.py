@@ -11,6 +11,8 @@ PixelLab 에서 만든 '기본 거인'(왼쪽 방향) 프레임을 resource/gian
 실행: python tools/make_giant_px.py [basic|thin ...]   (안 주면 전부)
   →  resource/giant_px.png · giant_px_flash.png · giant_px_meta.json  (기본 거인)
      resource/giant_thin.png · giant_thin_flash.png · giant_thin_meta.json  (마른 거인)
+     resource/giant_female*.png · giant_female_meta.json  (여성형 거인)
+     resource/giant_beast_px*.png · giant_beast_px_meta.json  (짐승 거인. giant_beast.png 는 make_sprites.py 의 예전 그림)
 (필요: pillow, numpy)
 """
 import json
@@ -63,6 +65,32 @@ GIANTS = {
             ('run',   'run',    [0, 1, 2, 3, 4, 5, 6, 7]),
         ],
         lying={4, 5, 6, 7}, lying_nape=(22, 5), blend={3: (2, 4)}),
+    # 여성형 거인 (영리한 거인 보스): 키 크고 날씬한 몸, 긴 검은 머리. 뒤로 쓰러져 머리가 오른쪽에 눕는다
+    'female': dict(
+        src='giant_female_src', out='giant_female', height=85.0,
+        head_box=(52, 20, 82, 46), nape_pt=(66, 41),
+        rows=[
+            ('walk',  'walk',   [0, 1, 2, 3, 4, 5, 6, 7]),
+            ('grab',  'attack', [0, 1, 2, 3, 4, 5, 6, 7]),
+            ('kneel', 'kneel',  [0, 1, 2]),                  # 뒤로 주저앉기 전까지만
+            ('death', 'death',  [0, 1, 2, 3, 4, 5, 6, 7]),
+            ('guard', 'guard',  [2, 3]),
+            ('run',   'run',    [0, 1, 2, 3, 4, 5, 6, 7]),
+        ],
+        lying={5, 6, 7}, lying_nape=(-13, -10), lying_from='right', blend={4: (3, 5)}),
+    # 짐승 거인 (돌 던지는 거인 보스): 털북숭이 유인원 몸, 긴 팔, 짧은 뿔
+    'beast': dict(
+        src='giant_beast_src', out='giant_beast_px', height=86.0,
+        head_box=(40, 19, 74, 47), nape_pt=(68, 40),
+        rows=[
+            ('walk',  'walk',    [0, 1, 2, 3, 4, 5, 6, 7]),
+            ('grab',  'attack2', [0, 1, 2, 3, 4, 5, 6, 7]),
+            ('kneel', 'kneel',   [0, 2, 3, 4]),
+            ('death', 'death',   [0, 1, 2, 3, 4, 5, 6, 7]),
+            ('guard', 'guard',   [1, 2]),
+            ('run',   'run',     [0, 1, 2, 3, 4, 5, 6, 7]),
+        ],
+        lying={7}, lying_nape=(-13, -12), lying_from='right', blend={6: (5, 7)}),
 }
 GROUND_ROWS = {'death'}          # 바닥에 붙여 놓을 줄 (떠 있는 프레임을 내려서 무너지듯 쓰러지게)
 
@@ -100,7 +128,10 @@ def build(g):
             bb = im.getbbox()
             oy = OY + (FOOT - bb[3] if name in GROUND_ROWS else 0)
             sheet.alpha_composite(im, (c * CELL + OX, r * CELL + oy))
-            if name == 'death' and i in g['lying']:
+            if name == 'death' and i in g['lying'] and g.get('lying_from') == 'right':
+                # 머리가 오른쪽에 누운 그림: 그림 오른쪽 아래에서 잰다
+                nx, ny = bb[2] + g['lying_nape'][0], bb[3] + g['lying_nape'][1]
+            elif name == 'death' and i in g['lying']:
                 nx, ny = bb[0] + g['lying_nape'][0], bb[1] + g['lying_nape'][1]
             else:
                 hx, hy = find_head(np.asarray(im, dtype=float), tmpl)

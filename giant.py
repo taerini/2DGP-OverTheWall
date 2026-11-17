@@ -34,8 +34,10 @@ class Sheet:
         self.kneel_nape = self.nape['kneel'][-1][1] / self.h
 
 
-SHEETS = {'basic': Sheet('giant_px'), 'thin': Sheet('giant_thin')}
-KIND_SHEET = {'erratic': 'thin'}     # 날뛰는 거인은 마른 거인 그림, 나머지는 기본 거인
+SHEETS = {'basic': Sheet('giant_px'), 'thin': Sheet('giant_thin'),
+          'female': Sheet('giant_female'), 'beast': Sheet('giant_beast_px')}
+# 날뛰는 거인은 마른 거인, 영리한 거인(보스)은 여성형 거인, 돌 던지는 거인(보스)은 짐승 거인 그림. 나머지는 기본 거인
+KIND_SHEET = {'erratic': 'thin', 'smart': 'female', 'thrower': 'beast'}
 
 
 def giant_height(k, sh=SHEETS['basic']):
