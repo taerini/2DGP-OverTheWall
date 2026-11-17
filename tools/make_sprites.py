@@ -917,6 +917,114 @@ def draw_giant_plated(pen, pts, rock=False):
         pen.circle(add(fh, mul(up, 6)), 8.0, (92, 88, 86, 255))
 
 
+# 초대형 거인: 길쭉한 몸(긴 다리·몸통·목), 피부 없이 드러난 붉은 근육과 밝은 힘줄, 털 없는 해골형 머리와 드러난 이빨
+COLOSSAL = dict(G_THIGH=28.0, G_SHIN=28.0, G_TORSO=38.0, G_NECK=8.0, G_HEAD=8.5,
+                G_UARM=27.0, G_FARM=25.0, G_HEAD_UP=9.5, G_HEAD_FWD=2.0, G_NAPE_UP=9.0, G_NAPE_FWD=-6.0)
+MU = (178, 60, 54, 255)             # 근육
+MU_BACK = (140, 44, 42, 255)        # 뒤쪽 팔다리 근육
+MU_DARK = (112, 30, 32, 255)        # 근육결·근육 사이
+TENDON = (228, 198, 150, 255)       # 힘줄
+TEETH = (238, 226, 200, 255)
+
+
+def muscle_limb(pen, a, b, w, col, bands=(), fibers=True):
+    """근육 한 마디: 근육결 선 + 정해진 위치(0~1)에 힘줄 띠"""
+    pen.limb(a, b, w, col)
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    ln = math.hypot(dx, dy) or 1.0
+    d = (dx / ln, dy / ln)
+    n = (-d[1], d[0])
+    if fibers:
+        for k in (-0.22, 0.12):
+            pen.line([add(add(a, mul(d, w * 0.4)), mul(n, w * k)),
+                      add(add(b, mul(d, -w * 0.4)), mul(n, w * (k + 0.08)))], MU_DARK, 0.7)
+    for t in bands:
+        c = add(a, mul((dx, dy), t))
+        pen.limb(add(c, mul(n, w * 0.52)), add(c, mul(n, -w * 0.52)), 2.6, TENDON)
+
+
+def draw_giant_colossal(pen, pts, rock=False):
+    hip, sh, up, fwd = pts['hip'], pts['sh'], pts['up'], pts['fwd']
+    (be, bh), (fe, fh) = pts['arms']
+    (bk, bf), (fk, ff) = pts['legs']
+    T = G_TORSO
+
+    def tp(a, b):
+        return add(add(hip, mul(fwd, a)), mul(up, b))
+    # 뒤쪽 팔·다리
+    muscle_limb(pen, sh, be, 8.5, MU_BACK, fibers=False)
+    muscle_limb(pen, be, bh, 7.5, MU_BACK, (0.9,), fibers=False)
+    pen.circle(bh, 5.0, MU_BACK)
+    muscle_limb(pen, hip, bk, 11.0, MU_BACK, fibers=False)
+    muscle_limb(pen, bk, bf, 9.0, MU_BACK, (0.92,), fibers=False)
+    pen.ellipse(add(bf, mul(fwd, 3)), 6.5, 3.2, MU_BACK)
+    # 몸통: 넓은 어깨, 가는 허리
+    body = [tp(-8, -3), tp(9, -3), tp(10, 14), tp(13, T - 6), tp(9, T + 3), tp(-11, T + 3), tp(-14, T - 8), tp(-10, 14)]
+    pen.poly(body, MU)
+    back = [tp(-8, -2), tp(-2, -2), tp(-4, 15), tp(-6, T - 2), tp(-11, T + 3), tp(-14, T - 8), tp(-10, 14)]
+    pen.poly(back, MU_BACK)
+    # 가슴 근육 두 덩어리 + 근육결
+    for poly in ([tp(2, T - 13), tp(10, T - 12), tp(13, T - 5), tp(9, T + 2), tp(2, T + 1)],
+                 [tp(1, T - 12), tp(1, T + 1), tp(-6, T + 1), tp(-7, T - 9)]):
+        pen.line(poly + [poly[0]], MU_DARK, 1.0)
+    for k in range(4):
+        pen.line([tp(3, T - 2 - k * 2.5), tp(10, T - 5 - k * 2.0)], MU_DARK, 0.6)
+    # 가운데 흉골 힘줄 + 복근 4줄 × 2칸 (사이가 밝은 힘줄)
+    pen.line([tp(1.5, T + 2), tp(1.5, T - 13), tp(2.0, 2)], TENDON, 1.6)
+    for i in range(5):
+        y = T - 13 - i * 6.0
+        pen.line([tp(-4.5, y), tp(1.5, y + 0.3), tp(8.5 - i * 0.4, y - 0.3)], TENDON, 1.2)
+    pen.line([tp(-4.5, T - 13), tp(-4.0, 2)], TENDON, 1.0)
+    pen.line([tp(8.5, T - 13), tp(7.0, 4)], TENDON, 1.0)
+    # 골반 쪽 V자 힘줄
+    pen.line([tp(10, 10), tp(4, 0), tp(1.5, -3)], TENDON, 1.4)
+    # 앞쪽 다리: 무릎 힘줄, 발목 띠
+    muscle_limb(pen, hip, fk, 12.0, MU)
+    muscle_limb(pen, fk, ff, 10.0, MU, (0.9,))
+    knee = add(fk, mul(fwd, 3.0))
+    pen.ellipse(knee, 3.2, 4.6, TENDON)
+    pen.line([add(knee, mul(up, 4.0)), add(add(knee, mul(up, 12.0)), mul(fwd, -1.0))], TENDON, 1.6)
+    pen.ellipse(add(ff, mul(fwd, 3)), 7.0, 3.4, MU)
+    pen.line([add(add(ff, mul(fwd, 1)), mul(up, -1)), add(add(ff, mul(fwd, 8)), mul(up, -1))], MU_DARK, 0.8)
+    # 긴 목: 양쪽으로 비스듬한 힘줄 두 줄
+    neck_top = add(sh, mul(up, G_NECK + 4))
+    pen.limb(sh, neck_top, 9.0, MU)
+    pen.line([add(sh, mul(fwd, 2.5)), add(neck_top, mul(fwd, -2.5))], TENDON, 1.5)
+    pen.line([add(sh, mul(fwd, -2.0)), add(neck_top, mul(fwd, 2.5))], TENDON, 1.2)
+    # 해골형 머리: 길쭉한 머리통, 깊은 눈구멍, 콧구멍, 입술 없이 드러난 이빨
+    H, R = pts['head'], G_HEAD
+
+    def hp(dx, dy):
+        return add(H, add(mul(fwd, dx * R), mul(up, dy * R)))
+    skull = [add(H, add(mul(fwd, 0.95 * R * math.cos(t)), mul(up, 1.18 * R * math.sin(t))))
+             for t in (i / 28 * 2 * math.pi for i in range(28))]
+    pen.poly(skull, MU)
+    pen.line([hp(-0.2, 1.1), hp(-0.85, 0.3), hp(-0.7, -0.6)], MU_DARK, 0.8)          # 옆머리 근육결
+    pen.line([hp(0.1, 1.15), hp(0.55, 0.85), hp(0.9, 0.45)], TENDON, 1.0)            # 이마 힘줄
+    for dx, sc in ((0.62, 1.0), (0.18, 0.8)):                                        # 깊은 눈구멍 + 작은 눈
+        c = hp(dx, 0.22)
+        pen.ellipse(c, 1.9 * sc, 1.5 * sc, MU_DARK)
+        pen.circle(add(c, mul(fwd, 0.3)), 0.6 * sc, (240, 230, 210, 255))
+    pen.line([hp(0.45, 0.42), hp(0.95, 0.40)], MU_DARK, 1.2)                          # 눈썹뼈 그늘
+    pen.ellipse(hp(0.86, -0.12), 0.8, 0.9, MU_DARK)                                   # 콧구멍
+    teeth = [hp(0.15, -0.42), hp(0.98, -0.40), hp(0.95, -0.80), hp(0.18, -0.84)]       # 드러난 이빨
+    pen.poly(teeth, TEETH)
+    pen.line([hp(0.16, -0.62), hp(0.97, -0.60)], MU_DARK, 0.6)
+    for i in range(7):
+        x = 0.24 + i * 0.11
+        pen.line([hp(x, -0.42), hp(x, -0.82)], MU_DARK, 0.45)
+    pen.line([hp(0.05, -0.30), hp(0.12, -0.95), hp(0.55, -1.12)], MU_DARK, 0.8)      # 턱 근육결
+    # 앞쪽 팔: 어깨 근육, 팔꿈치·손목 힘줄
+    muscle_limb(pen, sh, fe, 9.0, MU)
+    muscle_limb(pen, fe, fh, 8.0, MU, (0.12, 0.88))
+    pen.circle(fh, 5.6, MU)
+    delt = add(sh, mul(up, -1.0))
+    pen.circle(delt, 6.0, MU)
+    pen.line([add(delt, mul(up, 5.0)), add(add(delt, mul(up, -5.0)), mul(fwd, 2.0))], MU_DARK, 0.8)
+    if rock:
+        pen.circle(add(fh, mul(up, 5)), 7.0, (92, 88, 86, 255))
+
+
 # 망치 거인: 마르고 긴 잿빛 몸(돌을 깎은 듯한 선), 눈 틈 하나만 있는 매끈한 머리, 뒤쪽 손에 긴 자루 돌망치
 MAUL = dict(G_THIGH=27.0, G_SHIN=27.0, G_TORSO=38.0, G_NECK=6.0, G_HEAD=10.0,
             G_UARM=26.0, G_FARM=24.0, G_HEAD_UP=9.0, G_HEAD_FWD=2.5, G_NAPE_UP=8.0, G_NAPE_FWD=-7.5)
@@ -1049,6 +1157,7 @@ def make_giant_kinds():
     make_giant_kind('giant_bob', draw_giant_bob)                                   # 목덜미 좌표는 giant_meta.json 과 같다
     make_giant_kind('giant_beast', draw_giant_beast, BEAST, 'giant_beast_meta.json')
     make_giant_kind('giant_plated', draw_giant_plated, PLATED, 'giant_plated_meta.json')
+    make_giant_kind('giant_colossal', draw_giant_colossal, COLOSSAL, 'giant_colossal_meta.json')
     make_giant_kind('giant_maul', draw_giant_maul, MAUL, 'giant_maul_meta.json')
 
 

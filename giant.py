@@ -11,22 +11,36 @@ import render
 from config import *
 from projectile import Rock
 
-with open('resource/giant_meta.json') as f:
-    META = json.load(f)
-CELL = META['cell']            # 셀 크기 (그림 단위)
-CELL_PX = META['cell_px']      # 시트에서 실제 픽셀 크기
-SHEET_H = META['height']       # 그림 단위 키
-ROWS = [r for r, _ in META['rows']]
-FRAMES = dict(META['rows'])
-NAPE = META['nape']
-WALK_NAPE = sum(dy for _, dy in NAPE['walk']) / len(NAPE['walk']) / SHEET_H
-RUN_NAPE = sum(dy for _, dy in NAPE['run']) / len(NAPE['run']) / SHEET_H
-KNEEL_NAPE = NAPE['kneel'][2][1] / SHEET_H
+with open('resource/giant_meta.json') as f:         # 갑옷 거인 시트(giant_armor.png)는 예전 320px 칸 형식 그대로
+    ARMOR_META = json.load(f)
+ARMOR_ROWS = [r for r, _ in ARMOR_META['rows']]
+ARMOR_FRAMES = dict(ARMOR_META['rows'])
 
 
-def giant_height(k):
+class Sheet:
+    """거인 픽셀 시트 하나 (tools/make_giant_px.py 가 만든 png + meta)"""
+    def __init__(self, name):
+        with open(f'resource/{name}_meta.json') as f:
+            self.meta = json.load(f)
+        self.name = name
+        self.cell = self.meta['cell']            # 셀 크기 (그림 단위)
+        self.cell_px = self.meta['cell_px']      # 시트에서 실제 픽셀 크기
+        self.h = self.meta['height']             # 그림 단위 키
+        self.rows = [r for r, _ in self.meta['rows']]
+        self.frames = dict(self.meta['rows'])
+        self.nape = self.meta['nape']
+        self.walk_nape = sum(dy for _, dy in self.nape['walk']) / len(self.nape['walk']) / self.h
+        self.run_nape = sum(dy for _, dy in self.nape['run']) / len(self.nape['run']) / self.h
+        self.kneel_nape = self.nape['kneel'][-1][1] / self.h
+
+
+SHEETS = {'basic': Sheet('giant_px'), 'thin': Sheet('giant_thin')}
+KIND_SHEET = {'erratic': 'thin'}     # 날뛰는 거인은 마른 거인 그림, 나머지는 기본 거인
+
+
+def giant_height(k, sh=SHEETS['basic']):
     """크기 k 거인의 키. 서 있을 때 목덜미가 (서 있는 층 + k - 1)층 한가운데쯤 오게 맞춘다."""
-    return ((k - 1) * LANE_GAP + 70 - (k - 1) * 6.25) / WALK_NAPE
+    return ((k - 1) * LANE_GAP + 70 - (k - 1) * 6.25) / sh.walk_nape
 
 
 def max_lane(k):
@@ -37,7 +51,7 @@ def max_lane(k):
 # 종류별 능력치. size 는 고를 수 있는 크기들
 KINDS = {
     'normal':   dict(size=(1, 2, 3, 4, 5), speed=(55, 80), hp=1.0),
-    'erratic':  dict(size=(1, 2), speed=(70, 95), hp=0.9),
+    'erratic':  dict(size=(1, 2), speed=(105, 130), hp=0.9),   # 마른 거인: 빠르고, 붙으면 돌진 공격
     'climber':  dict(size=(1, 2, 3), speed=(50, 70), hp=1.0),
     'swarm':    dict(size=(1,), speed=(85, 110), hp=0.8),
     'armed':    dict(size=(1, 2, 3, 4, 5), speed=(48, 66), hp=1.3),
@@ -50,18 +64,45 @@ WAKE_DIST = 1300.0       # 미리 서 있는 거인은 주인공이 이만큼 �
 RUN_MULT = 2.6           # 달릴 때 걷는 속도의 몇 배
 RUN_FAR = 1400.0         # 주인공과 이만큼 멀면 늘 달린다 (먼 요새에서 벽까지 금방 온다)
 NO_RUN = ('thrower', 'colossal')    # 느릿느릿 걷는 보스
-DEATH_FRAME = 0.14       # 쓰러지는 모션 한 장 시간
+CHASE_R = 450.0          # 보스가 아닌 거인은 주인공이 이 반경(+몸 크기) 안에 오면 뛰어와서 공격한다
+# 마른 거인(날뛰는 거인)의 돌진: 쫓아가다 멈춰 서서 앞쪽에 빨간 범위를 띄우고 → 앞으로 확 덮친다
+LUNGE_CHASE_R = 340.0    # 빨라서 쫓기 시작하는 반경은 조금 좁게
+LUNGE_START = 170.0      # 주인공과 이 거리(+키의 20%) 안이면 멈춰 서서 돌진 준비
+LUNGE_WARN = 0.55        # 웅크리고 빨간 범위를 보여 주는 시간
+LUNGE_TIME = 0.22        # 덮치는 시간
+LUNGE_DIST = 230.0       # 덮치며 나아가는 거리 (+키의 40%)
+LUNGE_END = 0.35         # 덮친 뒤 웅크린 채 멈춰 있는 시간
+LUNGE_CD = 1.6           # 다음 돌진까지
+LUNGE_WARN_FRAMES = (0, 1, 2, 3, 4)   # grab 줄: 웅크리며 팔을 당김
+LUNGE_FRAMES = (5, 6)                 # grab 줄: 팔을 내지르며 덮침
+LUNGE_END_FRAME = 7
+DEATH_FRAME = 0.11       # 쓰러지는 모션 한 장 시간 (8장: 무릎 꿇고 → 앞으로 엎어짐)
 DEAD_FADE = (2.8, 3.6)   # 바닥에 누운 채 이 시간부터 흐려져서 사라진다
-GRAB_TIME = 0.8          # 손을 뻗기 시작해서 거두기까지
-GRAB_CD = 1.6            # 잡기를 거둔 뒤 다음 잡기까지
+GRAB_TIME = 0.7          # 손을 뻗기 시작해서 거두기까지
+GRAB_CD = 1.2            # 잡기를 거둔 뒤 다음 잡기까지
+SWAT_WARN = 0.45         # 목 뒤 후려치기: 목덜미 근처에 머물면 이만큼 뒤에 휩쓴다 (경고 표시는 없음)
+COUNTER_WARN = 0.35      # 베였는데 안 죽으면 이만큼 뒤 반격
+COUNTER_RATE = 0.6       # 목덜미를 베였는데 버텼을 때 목 뒤를 후려치는 확률
+SWAT_CD = (2.2, 3.4)     # 후려친 뒤 다음 후려치기까지
+SWAT_SWING = 0.3         # 손을 올린 뒤 실제로 휘두르는 시간 (주인공이 떠나도 끝까지 휘두른다)
+SWAT_FRAMES = (3, 4, 5, 6)   # 휘두를 때 쓰는 공격(grab) 줄 프레임: 큰 궤적
+HIT_GRAB_CD = 0.15       # 맞으면 공격 쿨다운을 이만큼으로 줄여 곧바로 반격한다
+GUARD_REACT = 0.8        # 서 있다가 목을 베이면 이만큼 손으로 목을 가린다 (그동안 목덜미 피해 15%)
+# 휘두르기 공격 범위: 앞쪽으로 키 × GRAB_FRONT + GRAB_PAD, 높이는 발밑부터 키의 GRAB_HIGH 까지
+# (목덜미는 키의 약 69% 높이라 목 높이에서 베는 주인공은 맞지 않는다)
+GRAB_FRONT = 0.6         # 실제로 맞는 앞쪽 거리 (예전 0.3의 2배)
+GRAB_START = 0.5         # 이 거리 안에 들어오면 휘두르기 시작 (예전 0.25의 2배)
+GRAB_PAD = 40            # 예전 20의 2배
+GRAB_HIGH = 0.65         # 예전 15~55% 에서 0~65% 로
 BLAST_WARN = 1.2         # 거대 거인 폭발 전에 위험 지역을 보여 주는 시간
 BLAST_R = 240
-GRAB_HIT_AT = 0.3        # state_t 가 이 값 아래로 내려가는 순간 잡는다 (뻗은 지 0.5초 뒤)
+GRAB_HIT_AT = 0.3        # state_t 가 이 값 아래로 내려가는 순간 잡는다 (뻗은 지 0.4초 뒤)
 PART_RATE = {'neck': 1.0, 'ankle': 0.3, 'body': 0.15, 'raw': 1.0}
 PART_NAME = {'neck': '목덜미', 'ankle': '발목', 'body': '몸통'}
 DMG_SPREAD = (0.85, 1.15)    # 벨 때마다 피해가 이 범위에서 흔들린다
 CRIT_RATE = 0.2
-CRIT_MULT = 1.8
+CRIT_MULT = 1.5
+HP_BY_SIZE = {1: 110, 2: 175, 3: 245, 4: 320, 5: 400}   # 크기별 기본 체력. 처음 공격력(40)으로 목덜미 3 / 4~5 / 6 / 8 / 9~10번
 
 
 def floor_of(y):
@@ -74,9 +115,10 @@ class Giant:
         self.kind = kind
         self.boss = info.get('boss')
         self.k = k
-        self.size = giant_height(k)
+        self.sh = SHEETS[KIND_SHEET.get(kind, 'basic')]
+        self.size = giant_height(k, self.sh)
         self.speed = random.uniform(*info['speed']) * (1.12 - 0.08 * k)
-        self.max_hp = (70 + 60 * (k - 1)) * info['hp'] * hp_mult
+        self.max_hp = HP_BY_SIZE[k] * info['hp'] * hp_mult
         self.hp = self.max_hp
         self.armor = info.get('armor', 0)
         self.max_armor = self.armor
@@ -84,7 +126,7 @@ class Giant:
         self.lane = lane
         self.vy = 0.0
         self.dir = -1
-        self.scale = self.size / SHEET_H
+        self.scale = self.size / self.sh.h
         self.state, self.state_t = 'walk', 0.0
         self.anim_t = random.uniform(0, 3)
         self.kneel_t = 0.0
@@ -92,6 +134,8 @@ class Giant:
         self.grab_cd = 0.0
         self.turn_t = random.uniform(2, 5)       # 날뛰는 거인: 방향 바꾸기
         self.climb_cd = random.uniform(2, 5)     # 벽 타는 거인
+        self.swat_cd = random.uniform(1.5, 3.0)   # 목 뒤 후려치기 (보스는 아직 안 쓴다)
+        self.swat_warn = SWAT_WARN
         self.guard_t, self.guard_cd = 0.0, 3.0   # 영리한 거인: 목덜미 가리기
         self.throw_cd = 2.5                      # 돌 던지는 거인
         self.blast_cd = 8.0                      # 거대 거인
@@ -100,11 +144,13 @@ class Giant:
         self.crit = False                        # 마지막으로 맞은 공격이 치명타였나
         self.waiting = False                     # 미리 서 있는 거인: 주인공이 다가올 때까지 제자리
         self.running = False
+        self.chasing = False                     # 주인공을 쫓아가는 중
         self.run_t = 0.0                         # 남은 질주 시간
         self.run_cd = random.uniform(1.5, 5.0)   # 다음 질주까지
         self.step = random.uniform(0, 100)       # 걸어온 거리 (걷기·달리기 모션용)
         self.grabbed = False
-        self.sheet = render.image('giant.png')
+        self.sheet = render.image(self.sh.name + '.png', pixel=True)
+        self.sheet_flash = render.image(self.sh.name + '_flash.png', pixel=True)   # 맞았을 때 하얗게 번쩍이는 판
         self.sheet_armor = render.image('giant_armor.png')
         self.nape_img = render.image('nape.png')
         self.ring = render.image('ring.png')
@@ -120,34 +166,48 @@ class Giant:
 
     def frame(self):
         if self.state == 'dead':
-            return 'death', min(FRAMES['death'] - 1, int(self.state_t / DEATH_FRAME))
+            return 'death', min(self.sh.frames['death'] - 1, int(self.state_t / DEATH_FRAME))
         if self.kneel_t > 0:
             # 주저앉은 채 또 베여도 다시 일어섰다 앉지 않는다: 앉는 모션은 처음 한 번만
             k = min(self.kneel_age, self.kneel_t)
-            return 'kneel', min(2, int(k / 0.1))
+            return 'kneel', min(self.sh.frames['kneel'] - 1, int(k / 0.08))
+        if self.state == 'lunge_warn':
+            k = 1 - self.state_t / LUNGE_WARN
+            return 'grab', LUNGE_WARN_FRAMES[min(len(LUNGE_WARN_FRAMES) - 1, int(k * len(LUNGE_WARN_FRAMES)))]
+        if self.state == 'lunge':
+            k = 1 - self.state_t / LUNGE_TIME
+            return 'grab', LUNGE_FRAMES[min(len(LUNGE_FRAMES) - 1, int(k * len(LUNGE_FRAMES)))]
+        if self.state == 'lunge_end':
+            return 'grab', LUNGE_END_FRAME
         if self.state in ('grab', 'wall'):
             if self.state == 'wall':
-                return 'grab', int(self.state_t / 0.15) % 4
-            return 'grab', min(3, int((GRAB_TIME - self.state_t) / (GRAB_TIME / 4)))
+                return 'grab', int(self.state_t / 0.15) % self.sh.frames['grab']
+            return 'grab', min(self.sh.frames['grab'] - 1, int((GRAB_TIME - self.state_t) / (GRAB_TIME / self.sh.frames['grab'])))
         if self.state == 'throw':
-            return 'throw', min(2, int((0.9 - self.state_t) / 0.3))
+            # 던지기 줄은 없앴다: 팔을 앞으로 뻗는 잡기 동작으로 던진다
+            return 'grab', min(self.sh.frames['grab'] - 1, int((0.9 - self.state_t) / (0.9 / self.sh.frames['grab'])))
+        if self.state == 'swat':
+            if self.state_t > SWAT_SWING:
+                return 'guard', 0      # 손을 목 뒤로 올린 자세
+            k = (SWAT_SWING - self.state_t) / SWAT_SWING
+            return 'grab', SWAT_FRAMES[min(len(SWAT_FRAMES) - 1, int(k * len(SWAT_FRAMES)))]
         if self.guarding():
             return 'guard', int(self.anim_t * 3) % 2
         if self.running:
-            return 'run', int(self.step / (18 * self.k ** 0.5)) % 6
-        return 'walk', int(self.step / (11 * self.k ** 0.5)) % 6
+            return 'run', int(self.step / (18 * self.k ** 0.5) * self.sh.frames['run'] / 6) % self.sh.frames['run']
+        return 'walk', int(self.step / (11 * self.k ** 0.5) * self.sh.frames['walk'] / 6) % self.sh.frames['walk']
 
     def nape(self):
         """판정용 목덜미 위치. 무릎을 꿇으면 바로 주저앉은 높이로 계산한다."""
         if self.kneel_t > 0:
-            dx, dy = NAPE['kneel'][2]
+            dx, dy = self.sh.nape['kneel'][-1]
         else:
             row, fr = self.frame()
-            dx, dy = NAPE[row][fr]
+            dx, dy = self.sh.nape[row][fr]
             if row == 'walk':
-                dy = WALK_NAPE * SHEET_H
+                dy = self.sh.walk_nape * self.sh.h
             elif row == 'run':
-                dy = RUN_NAPE * SHEET_H
+                dy = self.sh.run_nape * self.sh.h
         return self.x + dx * self.scale * (-self.dir), self.y + dy * self.scale
 
     def neck_floor(self):
@@ -157,7 +217,7 @@ class Giant:
         return self.size * 0.14 + 22
 
     def get_bb(self):
-        h = self.size * (KNEEL_NAPE + 0.12 if self.kneel_t > 0 else 1.0)
+        h = self.size * (self.sh.kneel_nape + 0.12 if self.kneel_t > 0 else 1.0)
         return self.x - self.size * 0.15, self.y, self.x + self.size * 0.15, self.y + h
 
     def part_for(self, floor):
@@ -205,14 +265,13 @@ class Giant:
                 effect.steam(self.x, self.y + 6, 2 + self.k, self.size * 0.12, (170, 160, 150), 16 + 6 * self.k)
             self.kneel_t = 1.6 if self.kind == 'colossal' else KNEEL_TIME
             self.guard_t = 0.0
-            if self.state in ('grab', 'throw'):
+            if self.state in ('grab', 'throw', 'lunge_warn', 'lunge', 'lunge_end'):
                 self.state = 'walk'
         elif self.armor > 0:
             dmg *= 0.4
-        # 손을 뻗는 중에 베이면 움찔하며 잡기를 놓친다
-        if self.state == 'grab' and not self.grabbed:
-            self.state = 'walk'
-            self.grab_cd = 1.5
+        # 휘두르는 중에 베여도 공격은 끊기지 않는다. 걷다가 베이면 곧바로 반격할 준비 (손이 닿으면 바로 휘두른다)
+        if self.state == 'walk' and self.kneel_t <= 0:
+            self.grab_cd = min(self.grab_cd, HIT_GRAB_CD)
         # 매번 조금씩 다른 피해, 가끔 치명타
         self.crit = part != 'raw' and random.random() < CRIT_RATE
         dmg *= random.uniform(*DMG_SPREAD) * (CRIT_MULT if self.crit else 1.0)
@@ -231,6 +290,12 @@ class Giant:
         if self.hp <= 0:
             self.die()
             return dmg, True
+        # 서 있다가 목덜미를 베였는데 버텼다: 가끔 곧바로 목 뒤를 후려치고, 아니면 한 번 손으로 목을 가린다
+        if part == 'neck' and not self.boss and self.kneel_t <= 0 and self.state == 'walk':
+            if random.random() < COUNTER_RATE and self.player_near_nape(1.6):
+                self.start_swat(COUNTER_WARN)
+            elif self.guard_t <= 0:
+                self.guard_t = GUARD_REACT
         return dmg, False
 
     def die(self):
@@ -272,6 +337,8 @@ class Giant:
         self.state_t += dt if self.state in ('dead', 'wall') else -dt
         self.flash_t = max(0.0, self.flash_t - dt)
         self.grab_cd = max(0.0, self.grab_cd - dt)
+        self.guard_t = max(0.0, self.guard_t - dt)
+        self.swat_cd = max(0.0, self.swat_cd - dt)
         if self.state == 'dead':
             self.steam_t -= dt
             if self.steam_t <= 0 and self.state_t < 1.8:
@@ -294,6 +361,10 @@ class Giant:
 
         if self.state == 'grab':
             self.update_grab()
+        elif self.state in ('lunge_warn', 'lunge', 'lunge_end'):
+            self.update_lunge(dt)
+        elif self.state == 'swat':
+            self.update_swat()
         elif self.state == 'throw':
             if self.state_t < 0.45 and not self.grabbed:
                 self.grabbed = True
@@ -314,9 +385,88 @@ class Giant:
         else:
             self.walk(dt)
 
+    def update_chase(self):
+        """반경 안의 주인공을 향해 돌아선다. 손이 닿을 만큼 붙으면 멈춰 선다. 쫓는 중이면 True."""
+        was = self.chasing
+        self.chasing = False
+        if not self.boss:
+            cx, cy = play_mode.player.center()
+            dx = cx - self.x
+            r = LUNGE_CHASE_R if self.lunger() else CHASE_R
+            self.chasing = math.hypot(dx, cy - (self.y + self.size * 0.35)) < r + self.size * 0.3
+            if self.lunger() and play_mode.player.floor() != self.lane:
+                self.chasing = False             # 빠른 마른 거인은 같은 층에 있는 주인공만 알아챈다
+        if self.chasing:
+            if abs(dx) > self.size * 0.08 + 8:
+                self.dir = 1 if dx > 0 else -1
+        elif was:
+            self.dir = -1                        # 놓치면 다시 벽으로
+        return self.chasing
+
+    def chase_close(self):
+        """쫓다가 공격할 거리까지 붙었나 (더 다가가지 않고 공격한다)"""
+        dx = abs(play_mode.player.center()[0] - self.x)
+        if self.lunger():
+            return dx < LUNGE_START + self.size * 0.2
+        return dx < self.size * 0.2 + 16
+
+    def lunger(self):
+        """돌진으로 공격하는 거인인가 (마른 거인)"""
+        return self.sh is SHEETS['thin'] and not self.boss
+
+    def lunge_reach(self):
+        """돌진이 닿는 앞쪽 거리: 나아가는 거리 + 팔 길이"""
+        return LUNGE_DIST + self.size * 0.4 + self.size * GRAB_FRONT + GRAB_PAD
+
+    def try_lunge(self):
+        """쫓다가 붙었고 주인공이 앞쪽 손 닿는 높이에 있으면 멈춰 서서 돌진 준비"""
+        p = play_mode.player
+        if self.grab_cd > 0 or p.invuln > 0 or not self.chasing or not self.chase_close():
+            return
+        cx, cy = p.center()
+        rel = (cx - self.x) * self.dir
+        if 0 < rel < self.lunge_reach() and self.y <= cy < self.y + self.size * GRAB_HIGH:
+            self.state, self.state_t = 'lunge_warn', LUNGE_WARN
+            self.grabbed = False
+
+    def in_lunge_zone(self, cx, cy):
+        rel = (cx - self.x) * self.dir
+        return -10 < rel < self.size * GRAB_FRONT + GRAB_PAD and self.y <= cy < self.y + self.size * GRAB_HIGH
+
+    def update_lunge(self, dt):
+        if self.state == 'lunge_warn':
+            if self.state_t <= 0:
+                self.state, self.state_t = 'lunge', LUNGE_TIME
+                effect.steam(self.x, self.y + 4, 2 + self.k, self.size * 0.1, (170, 160, 150), 14 + 5 * self.k)
+            return
+        if self.state == 'lunge':
+            # 앞으로 확 나아간다. 벽·길 끝에서는 멈춘다
+            step = (LUNGE_DIST + self.size * 0.4) / LUNGE_TIME * dt
+            nx = self.x + self.dir * step
+            stop = WALL_X + self.size * 0.14 + 6
+            if (self.lane == 0 and nx <= stop) or not map_data.segment_at(self.lane, nx):
+                nx = self.x
+            self.x = nx
+            self.step += step
+            if not self.grabbed and self.in_lunge_zone(*play_mode.player.center()):
+                self.grabbed = True
+                play_mode.player.hurt(self.x, self.power())
+            for a in play_mode.allies():
+                if self.in_lunge_zone(*a.center()):
+                    a.hurt(self.x)
+            if self.state_t <= 0:
+                self.state, self.state_t = 'lunge_end', LUNGE_END
+            return
+        if self.state_t <= 0:
+            self.state = 'walk'
+            self.grab_cd = LUNGE_CD
+
     def walk(self, dt):
         speed = self.speed
-        if self.kind == 'erratic':
+        if self.update_chase():
+            if self.chase_close():
+                speed = 0.0
+        elif self.kind == 'erratic':
             self.turn_t -= dt
             if self.turn_t <= 0:
                 if self.dir < 0 and random.random() < 0.5:
@@ -334,7 +484,6 @@ class Giant:
                     return
         elif self.kind == 'smart':
             self.guard_cd -= dt
-            self.guard_t = max(0.0, self.guard_t - dt)
             p = play_mode.player
             nx, ny = self.nape()
             near = math.hypot(p.x - nx, p.y + 18 - ny) < 140
@@ -350,6 +499,8 @@ class Giant:
                 self.state, self.state_t = 'throw', 0.9
                 self.grabbed = False
                 return
+        if self.guarding() and self.kind != 'smart':
+            speed = 0.0                          # 목을 가리는 동안은 멈춰 선다
 
         speed = self.update_run(dt, speed)
         self.x += self.dir * speed * dt
@@ -365,7 +516,14 @@ class Giant:
             self.lane = None
             self.vy = 0.0
             return
-        self.try_grab()
+        if self.guarding() and self.kind != 'smart':
+            return                               # 목을 다 가린 뒤에 공격한다
+        if self.lunger():
+            self.try_lunge()
+        else:
+            self.try_grab()
+        if self.state == 'walk':
+            self.try_swat()
 
     def update_run(self, dt, speed):
         """멀리 있으면 늘 달리고, 가까이에선 가끔 갑자기 질주한다. 달리는 속도를 돌려준다."""
@@ -376,7 +534,8 @@ class Giant:
             self.run_cd = self.run_t + (random.uniform(1.5, 4.0) if self.kind == 'erratic' else random.uniform(3.0, 8.0))
         far = abs(play_mode.player.x - self.x) > RUN_FAR
         was = self.running
-        self.running = self.kind not in NO_RUN and not self.guarding() and (far or self.run_t > 0)
+        chase = self.chasing and speed > 0
+        self.running = self.kind not in NO_RUN and not self.guarding() and speed > 0 and (far or self.run_t > 0 or chase)
         if not self.running:
             return speed
         # 땅을 박차는 발걸음마다 흙먼지
@@ -401,28 +560,57 @@ class Giant:
         return self.in_grab_zone(*play_mode.player.center(), front, extra)
 
     def in_grab_zone(self, cx, cy, front, extra=0.0):
-        """앞쪽, 손이 닿는 높이(키의 15~55%)만 잡힌다. 목 높이와 (크기 2 이상의) 발목 높이는 안전하다."""
+        """앞쪽, 발밑부터 키의 GRAB_HIGH 높이까지 맞는다. 목 높이는 안전하다."""
         rel = (cx - self.x) * self.dir
-        low, high = self.y + self.size * 0.15, self.y + self.size * 0.55
-        if self.k == 1:
-            low = self.y
-        return 0 < rel < self.size * front + 20 + extra and low < cy < high
+        low, high = self.y, self.y + self.size * GRAB_HIGH
+        return 0 < rel < self.size * front + GRAB_PAD + extra and low < cy < high
 
     def try_grab(self):
         p = play_mode.player
         if self.grab_cd > 0 or p.invuln > 0:
             return
-        if self.player_in_grab_zone(0.25):
+        if self.player_in_grab_zone(GRAB_START):
             self.state, self.state_t = 'grab', GRAB_TIME
             self.grabbed = False
+
+    def swat_r(self):
+        """목 뒤 후려치기가 닿는 반지름 (목덜미 중심)"""
+        return 46 + self.size * 0.06
+
+    def player_near_nape(self, scale=1.0):
+        px, py = play_mode.player.center()
+        nx, ny = self.nape()
+        return math.hypot(px - nx, py - ny) < self.swat_r() * scale
+
+    def start_swat(self, warn):
+        self.state, self.state_t = 'swat', warn + SWAT_SWING
+        self.swat_warn = warn
+        self.grabbed = False
+
+    def try_swat(self):
+        """목덜미 근처에 머무는 주인공을 손바닥으로 후려친다 (보스는 아직 안 쓴다)"""
+        if self.boss or self.swat_cd > 0 or play_mode.player.invuln > 0:
+            return
+        if self.player_near_nape(1.3):
+            self.start_swat(SWAT_WARN)
+
+    def update_swat(self):
+        """손을 올리고(swat_warn) → 휘두르기 시작할 때 한 번 판정 → 끝까지 휘두른 뒤 걷기로"""
+        if not self.grabbed and self.state_t <= SWAT_SWING:
+            self.grabbed = True
+            if self.player_near_nape():
+                play_mode.player.hurt(self.x, self.power())
+        if self.state_t <= 0:
+            self.state = 'walk'
+            self.swat_cd = random.uniform(*SWAT_CD)
 
     def update_grab(self):
         if not self.grabbed and self.state_t < GRAB_HIT_AT:
             self.grabbed = True
-            if self.player_in_grab_zone(0.3, 10):
+            if self.player_in_grab_zone(GRAB_FRONT, 20):
                 play_mode.player.hurt(self.x, self.power())
             for a in play_mode.allies():
-                if self.in_grab_zone(*a.center(), 0.3, 10):
+                if self.in_grab_zone(*a.center(), GRAB_FRONT, 20):
                     a.hurt(self.x)
         if self.state_t <= 0:
             self.state = 'walk'
@@ -451,12 +639,24 @@ class Giant:
     # ------------------------------------------------ 그리기
     def draw_danger(self):
         """곧 공격이 들어올 자리를 빨갛게 칠한다. 들어올 때가 가까울수록 진해진다."""
+        if self.state == 'lunge_warn' and self.alive() and self.kneel_t <= 0:
+            # 돌진: 앞으로 덮칠 길 전체 (발밑 ~ 키의 GRAB_HIGH)
+            k = min(1.0, 1 - self.state_t / LUNGE_WARN)
+            x1, x2 = sorted((self.x, self.x + self.dir * self.lunge_reach()))
+            sx1, sy1 = camera.to_screen(x1, self.y)
+            sx2, sy2 = camera.to_screen(x2, self.y + self.size * GRAB_HIGH)
+            render.rect(sx1, sy1, sx2, sy2, DANGER, 40 + 90 * k)
+            fill = (sx2 - sx1) * k
+            if self.dir < 0:
+                render.rect(sx1, sy1, sx1 + fill, sy1 + 4, DANGER, 230)
+            else:
+                render.rect(sx2 - fill, sy1, sx2, sy1 + 4, DANGER, 230)
         if self.state == 'grab' and not self.grabbed:
-            # 잡기: 손이 닿는 앞쪽, 키의 15~55% 높이 (in_grab_zone 과 같은 범위)
+            # 휘두르기: 손이 닿는 앞쪽, 발밑부터 키의 GRAB_HIGH 높이 (in_grab_zone 과 같은 범위)
             k = min(1.0, (GRAB_TIME - self.state_t) / (GRAB_TIME - GRAB_HIT_AT))
-            reach = self.size * 0.3 + 30
-            low = self.y if self.k == 1 else self.y + self.size * 0.15
-            high = self.y + self.size * 0.55
+            reach = self.size * GRAB_FRONT + GRAB_PAD + 20
+            low = self.y
+            high = self.y + self.size * GRAB_HIGH
             x1, x2 = sorted((self.x, self.x + self.dir * reach))
             sx1, sy1 = camera.to_screen(x1, low)
             sx2, sy2 = camera.to_screen(x2, high)
@@ -483,21 +683,36 @@ class Giant:
         if not camera.visible(self.x - self.size * 0.5, self.x + self.size * 0.5):
             return
         row, fr = self.frame()
-        r = ROWS.index(row)
-        img = self.sheet_armor if self.armor > 0 else self.sheet
-        skin = zone_color(self.x, 'skin')
-        if self.kind == 'colossal':
-            skin = (skin[0], int(skin[1] * 0.78), int(skin[2] * 0.7))
+        r = self.sh.rows.index(row)
+        if self.armor > 0:
+            img, skin = self.sheet_armor, zone_color(self.x, 'skin')
+        else:
+            # 기본 거인은 원본 그림 색 그대로 그린다 (구간 피부색을 곱하지 않음). 거대 거인만 붉게
+            img, skin = self.sheet, (255, 255, 255)
+            if self.kind == 'colossal':
+                skin = (255, 199, 178)
         alpha = 1.0
         if self.state == 'dead' and self.state_t > DEAD_FADE[0]:
             alpha = max(0.0, 1 - (self.state_t - DEAD_FADE[0]) / (DEAD_FADE[1] - DEAD_FADE[0]))
         if self.flash_t > 0:
             skin = (255, 255, 255)
+            if self.armor <= 0:
+                img = self.sheet_flash
         render.tint(img, skin, alpha)
-        w = CELL * self.scale
         sx, sy = camera.to_screen(self.x, self.y)
-        img.clip_composite_draw(fr * CELL_PX, (len(ROWS) - 1 - r) * CELL_PX, CELL_PX, CELL_PX, 0,
-                                'h' if self.dir > 0 else '', sx, sy + (CELL / 2 - META['base']) * self.scale, w, w)
+        if img is self.sheet_armor:
+            # 갑옷 시트는 줄 구성과 프레임 수, 칸 크기가 달라서 따로 맞춘다
+            m = ARMOR_META
+            n = ARMOR_FRAMES[row]
+            fr = min(n - 1, fr * n // self.sh.frames[row])
+            r, nrows, cpx, cell = ARMOR_ROWS.index(row), len(ARMOR_ROWS), m['cell_px'], m['cell']
+            scale = self.size / m['height']
+        else:
+            sh = self.sh
+            m, nrows, cpx, cell, scale = sh.meta, len(sh.rows), sh.cell_px, sh.cell, self.scale
+        w = cell * scale
+        img.clip_composite_draw(fr * cpx, (nrows - 1 - r) * cpx, cpx, cpx, 0,
+                                'h' if self.dir > 0 else '', sx, sy + (cell / 2 - m['base']) * scale, w, w)
         render.untint(img)
 
     def draw(self):
@@ -535,5 +750,5 @@ class Giant:
             render.rect(nsx - 16, nsy + 14, nsx + 16, nsy + 17, (0, 0, 0), 140)
             render.rect(nsx - 16, nsy + 14, nsx - 16 + 32 * k, nsy + 17, (230, 90, 70), 220)
         # 크기 표시
-        render.text(f'{self.k}', sx, sy + self.size * (KNEEL_NAPE if self.kneel_t > 0 else 1.0) + 12, 12,
+        render.text(f'{self.k}', sx, sy + self.size * (self.sh.kneel_nape if self.kneel_t > 0 else 1.0) + 12, 12,
                     (230, 220, 210), 'center', alpha=0.7)
