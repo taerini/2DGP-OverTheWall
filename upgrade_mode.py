@@ -58,6 +58,7 @@ def outline(l, b, r, tp, col, a, w=1):
 choices = []
 hover = -1
 t = 0.0
+chosen = False
 
 
 def card_rect(i):
@@ -67,10 +68,11 @@ def card_rect(i):
 
 
 def init():
-    global choices, hover, t
+    global choices, hover, t, chosen
     choices = upgrade.roll()
     hover = -1
     t = 0.0
+    chosen = False
 
 
 def finish():
@@ -86,7 +88,9 @@ def resume():
 
 
 def choose(i):
-    if 0 <= i < len(choices) and t > 0.25:
+    global chosen
+    if not chosen and 0 <= i < len(choices) and t > 0.25:   # 한 프레임에 입력이 겹쳐도 한 번만 고른다
+        chosen = True
         upgrade.apply(choices[i])
         play_mode.hud.show_message(f'{choices[i][0]}: {choices[i][1]}', 2.0)
         game_framework.pop_mode()

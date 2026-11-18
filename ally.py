@@ -6,7 +6,10 @@ import effect
 import play_mode
 import render
 from config import *
-from player import ROWS, ATTACK
+from player import ATTACK
+
+# 동료 시트의 줄 (주인공 시트와는 따로 간다)
+ROWS = ['idle', 'run', 'wire', 'air', 'slashQ', 'slashW', 'spinE', 'hit']
 
 BASE = 8                    # 칸 아래에서 발바닥까지 (64칸·96칸 시트 모두)
 
@@ -29,7 +32,7 @@ class Ally:
     FORT_CD = 1.6
     SHEET = 'ally1.png'      # 초록 망토
     SIZE = SCALE             # 그리는 크기 (주인공 = 1.0)
-    # 시트 형식: 예전 그림(ally1~3)은 64칸·줄마다 4프레임, 픽셀 그림(tools/make_hero_px.py)은 96칸·8프레임
+    # 시트 형식: 예전 그림(ally1~3)은 64칸·줄마다 4프레임, 픽셀 그림(tools/make_ally_px.py)은 96칸·8프레임
     CELL = 64                # 시트 칸 크기
     DRAW_CELL = 64           # 크기 1.0 일 때 화면에 그리는 칸 크기 (주인공 픽셀 시트는 96칸을 72로 그린다)
     FRAMES = 4
