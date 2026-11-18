@@ -59,8 +59,10 @@ def player_dead():
 
 # ------------------------------------------------ 게임 사건
 def on_giant_killed(g):
-    global kills, next_upgrade, upgrade_gap, pending_upgrades
+    global kills, next_upgrade, upgrade_gap, pending_upgrades, first_boss_down
     kills += 1
+    if g.kind == ZONES[0].get('boss'):
+        first_boss_down = True          # 이제부터 거인이 원래대로 나온다
     if kills >= next_upgrade:
         pending_upgrades += 1
         next_upgrade += upgrade_gap
@@ -203,16 +205,59 @@ def spawn_x():
     return min(x, FORTRESS_X + 40)
 
 
+first_boss_down = False   # 첫 보스를 쓰러뜨렸나
+budget = {}               # 첫 보스 전까지 남은 일반 거인 수 {크기: 마리} (FIRST_BOSS_BUDGET)
+
+
+def size_unlock(k, level):
+    """첫 보스 전 익숙해진 정도(level 0~1)에 따라 크기 k 가 얼마나 나오나 0~1.
+    1m 는 늘, 2m 는 조금 익숙해지면, 3m 는 꽤 익숙해진 뒤에 섞여 나오기 시작한다"""
+    lo, hi = FIRST_BOSS_UNLOCK.get(k, (0.0, 0.0))
+    if hi <= lo:
+        return 1.0 if level >= lo else 0.0
+    return max(0.0, min(1.0, (level - lo) / (hi - lo)))
+
+
+def first_level():
+    """첫 보스 전 익숙해진 정도: 쓰러뜨린 거인 수로 잰다 (FIRST_BOSS_RAMP 마리면 1)"""
+    return kills / FIRST_BOSS_RAMP
+
+
+def budget_pick(kind, level):
+    """첫 보스 전: 남은 수 안에서 (종류, 크기)를 고르고 하나 뺀다. 다 나왔으면 None.
+    익숙해진 정도(level)가 낮을수록 작은 거인 위주로, 높아질수록 큰 거인도 섞인다.
+    그 종류가 낼 수 있는 크기가 남아 있지 않으면 보통 거인으로 바꾼다"""
+    from giant import KINDS
+    for kd in (kind, 'normal'):
+        sizes = [s for s in KINDS[kd]['size'] if budget.get(s, 0) > 0]
+        if not sizes:
+            continue
+        weights = [budget[s] * size_unlock(s, level) for s in sizes]
+        if sum(weights) <= 0:
+            if any(budget.get(s, 0) > 0 and size_unlock(s, level) > 0 for s in budget):
+                continue            # 이 종류로는 아직 낼 크기가 없다 → 보통 거인으로
+            weights = [budget[s] for s in sizes]   # 작은 거인을 다 냈으면 큰 것만 남는다
+        k = random.choices(sizes, weights)[0]
+        budget[k] -= 1
+        return kd, k
+    return None
+
+
 def fort_spawn():
     kinds = [(k, w) for k, w, t in FORT_KINDS if play_time >= t]
     kind = random.choices([k for k, _ in kinds], [w for _, w in kinds])[0]
     x = spawn_x()
     # 크기는 요새가 아니라 주인공이 이야기를 얼마나 나아갔는지(들어가 본 가장 먼 구간)를 따른다
     z = progress()
-    spawn(kind, x, lane=0, zone=z)
-    if kind == 'swarm':
-        for i in range(1, 3):
-            spawn('swarm', x + i * 50, lane=0, zone=z)
+    n = 3 if kind == 'swarm' else 1
+    for i in range(n):
+        if first_boss_down:
+            spawn(kind, x + i * 50, lane=0, zone=z)
+            continue
+        pick = budget_pick(kind, first_level())
+        if pick is None:
+            return                      # 첫 보스 전 몫을 다 냈다
+        spawn(pick[0], x + i * 50, k=pick[1], lane=0, zone=z)
 
 
 def update_spawns(dt):
@@ -269,8 +314,11 @@ def init():
     farthest_x = 0.0
     spawn_t.clear()
     spawn_t['fort'] = 4.0       # 시작 장면이 끝난 뒤 이만큼 지나야 첫 거인이 나온다
-    global intro_t
+    global intro_t, first_boss_down
     intro_t = 0.0
+    first_boss_down = False
+    budget.clear()
+    budget.update(FIRST_BOSS_BUDGET)
 
     background = Background()
     hud = Hud()
@@ -287,13 +335,23 @@ def init():
 
     # 처음부터 길 곳곳에 그 구간의 거인이 서 있다 (이후로는 화면 오른쪽 바깥에서 나온다).
     # 주인공이 가까이 올 때까지 제자리에서 기다리므로, 시작하면 첫 구간의 작은 거인부터 만난다
+    # 첫 보스가 나오는 자리 앞쪽 거인은 첫 보스 전 몫(FIRST_BOSS_BUDGET)에서 꺼내 쓴다
+    boss_x = ZONES[0].get('boss_at', 1.0) * ZONE_W
     for x in (3000, 3600, 4300, 5000):
+        budget[1] -= 1
         spawn('normal' if x < 3800 else ZONES[0]['kind'], x, k=1).waiting = True
     # 그 뒤로는 PRESET_GAP 마다 하나씩, 요새 앞까지. 뒤로 갈수록 조금 더 빽빽하다
     x = 5400.0
     while x < FORTRESS_X - 1500:
         x += PRESET_GAP * random.uniform(0.75, 1.25) * (1 - 0.35 * x / MAP_W)
-        spawn(ZONES[zone_of(x)]['kind'], x).waiting = True
+        kind = ZONES[zone_of(x)]['kind']
+        if x < boss_x:
+            pick = budget_pick(kind, (x - 5400.0) / (boss_x - 5400.0))   # 길에 서 있는 거인: 멀리 있을수록 크다
+            if pick is None:
+                continue
+            spawn(pick[0], x, k=pick[1]).waiting = True
+        else:
+            spawn(kind, x).waiting = True
 
 
 def finish():

@@ -10,9 +10,40 @@ ANCHOR_LOW = 30              # 가장 낮게. 이 사이에서 클릭한 높이�
 
 GRAVITY = 1500.0
 
+HERO_HEIGHT = 56              # 주인공이 서 있을 때 화면에서의 키 (px)
+HERO_STRIDE = 150.0           # 달리기 그림 한 바퀴(두 걸음)에 나아가는 거리: 발 움직임이 실제 속도와 맞는다
+HERO_TURN_TIME = 0.3          # 느리게 달리다 방향을 바꿀 때 달리면서 앞모습을 지나 도는 시간 (초)
+HERO_JOG = 70.0               # 가장 느린 달리기 속도: 주인공은 서 있지 않고, 목표 바로 앞까지 천천히 달린다
+HERO_CURVE_SPEED = 230.0      # 이 속도 이상으로 달리다 반대로 꺾으면 멈추지 않고 커브를 돈다 (아래면 HERO_TURN_TIME 의 일반 턴)
+HERO_CURVE_TIME = 0.62        # 커브 한 번에 걸리는 시간 (초): 감속하며 들어가 돌고 빠져나오기까지
+HERO_CURVE_MIN = 0.42         # 커브 한가운데의 실제 달리는 속력 (들어올 때 속력에 대한 비율)
+HERO_CURVE_EXIT = 0.62        # 커브를 빠져나오는 순간의 속력 비율. 여기서 다시 가속한다
+HERO_CURVE_RECOVER = 0.4      # 빠져나온 뒤 천천히 가속하는 시간 (초)
+HERO_CURVE_ACCEL = 620.0      # 그동안의 가속도 (평소 1700)
+HERO_CURVE_LEAN = 0.22        # 커브 안쪽으로 몸을 기울이는 각도 (라디안)
+HERO_CURVE_DEPTH = 0.16       # 커브 한가운데서 화면 쪽으로 다가오며 커 보이는 정도
+HERO_CURVE_DROP = 7.0         # 화면 쪽으로 다가오며 아래로 내려오는 높이 (px)
+HERO_SLASH_TIME = 0.34        # 칼을 휘두르는 시간 (초)
+HERO_WIRE_SLASH_TIME = 0.46   # 와이어로 날며 크게 베는 시간 (초)
+HERO_WIRE_SLASH_HIT = 0.3     # 그중 칼을 내리치는 시점 (0~1). 앞쪽 젖히는 동작은 빠르게 지나간다
+HERO_WIRE_SLASH_DASH = 1.45   # 내리치는 순간 앞으로 튀어 나가는 속도 배율
+HERO_WIRE_WINDUP = 0.13       # 땅에서 와이어를 걸 때 웅크리는 시간 (이 동안 와이어가 날아간다)
+HERO_WIRE_SPRING = 0.11       # 웅크렸다 튀어 오르는 그림 시간
+HERO_FALL_GRAVITY = 1.4       # 떨어질 때 중력 배율 (묵직하게)
+HERO_FALL_MAX = 1200.0        # 떨어지는 최대 속도
+HERO_LAND_SPEED = 330.0       # 이 속도 이상으로 떨어지면 세게 착지한다
+
 BGM_VOLUME = 80               # 배경 음악 크기 (0~128)
 # 효과음 크기 (0~128). 여기 없는 소리는 default
-SFX_VOLUME = {'default': 100, 'slash': 80, 'wire': 35, 'giant_attack': 90, 'gate_open': 110}
+SFX_VOLUME = {'default': 100, 'slash': 80, 'wire': 35, 'giant_attack': 90, 'gate_open': 110, 'skid': 40, 'dash': 70, 'land': 95}
+
+# 첫 보스(1구간 보스)를 쓰러뜨리기 전까지 나오는 일반 거인 수: {크기: 마리}. 다 나오면 보스를 잡을 때까지 더 안 나온다
+# (처음부터 길에 서 있는 거인 중 보스가 나오는 자리 앞쪽 것도 여기에 든다)
+FIRST_BOSS_BUDGET = {1: 15, 2: 10, 3: 2}
+# 크기별로 섞여 나오기 시작하는 때 (익숙해진 정도 0~1: 시작 → 남은 수만큼 다 섞임).
+# 익숙해진 정도 = 첫 보스 전에 쓰러뜨린 거인 수 / FIRST_BOSS_RAMP. 길에 서 있는 거인은 보스 자리까지 얼마나 먼가로 잰다
+FIRST_BOSS_UNLOCK = {1: (0.0, 0.0), 2: (0.2, 0.5), 3: (0.6, 0.9)}
+FIRST_BOSS_RAMP = 15
 
 # 시연용: n 번째 카드 고르기에 반드시 나오는 카드 (upgrade.UPGRADES 의 이름). 비우면 모두 무작위
 DEMO_CARDS = ['회오리 베기 (W)', '동료: 리바이']
