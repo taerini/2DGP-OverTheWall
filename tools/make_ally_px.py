@@ -1,12 +1,12 @@
-"""PixelLab 주인공·동료 시트 합치기 (96×96 칸, 주인공 줄 9개 · 동료 줄 8개, 줄마다 8프레임, 오른쪽을 봄).
+"""PixelLab 동료 시트 합치기 (96×96 칸, 줄 8개, 줄마다 8프레임, 오른쪽을 봄).
 
 PixelLab 에서 만든 캐릭터(오른쪽 방향) 프레임을 resource/<이름>_src/ 에 받아 두고,
 줄마다 프레임을 골라 한 장으로 붙인다. 그림 자체는 고치지 않는다.
 - 캔버스 크기마다 발바닥 높이가 다르다 (FOOT). 칸 아래에서 BASE(8)px 위에 발바닥이 오도록 맞춘다.
 - 폴더 이름 대신 'east' 를 쓰면 서 있는 기본 모습(east.png) 한 장을 그 줄 전체에 쓴다.
 
-실행: python tools/make_hero_px.py [hero|ally_red|ally_hood ...]   (안 주면 전부)
-  →  resource/hero_px.png · hero_px_meta.json (주인공), ally_red_px.png (빨간 목도리 동료),
+실행: python tools/make_ally_px.py [ally_red|ally_hood ...]   (안 주면 전부)
+  →  resource/ally_red_px.png (빨간 목도리 동료),
      ally_hood_px.png (후드 동료)
 (필요: pillow)
 """
@@ -28,18 +28,6 @@ STILL = ('east', [0] * 8)        # 서 있는 기본 모습 한 장
 # 캐릭터별 줄: (시트 줄 이름, PixelLab 애니메이션 폴더, 쓸 프레임 번호 8개, 발바닥 높이를 따로 줄 때)
 # 줄 순서는 player.ROWS 와 같다
 CHARS = {
-    # idle 은 템플릿, slashQ·slashW 는 v3, 나머지는 pixminimax 로 만들었다 (v3 는 서 있는 자세를 못 벗어나서)
-    'hero': dict(src='hero_px_src', out='hero_px', rows=[
-        ('idle',   'idle',          [0, 0, 1, 1, 2, 2, 3, 3]),         # 4프레임을 두 번씩
-        ('run',    'run_sprint',    ALL8, 72),                         # 전력 질주, 발이 y=72
-        ('wire',   'wire_fly',      ALL8),                             # 수평 비행 (게임에서 날아가는 방향으로 돌린다)
-        ('air',    'air_jump',      [1, 2, 3, 2, 5, 6, 7, 6]),         # 0~3 상승(무릎 당김), 4~7 하강(팔 벌림)
-        ('slashQ', 'slashQ',        ALL8),
-        ('slashW', 'slashW',        ALL8),
-        ('spinE',  'spin_attack',   [1, 2, 3, 4, 5, 6, 7, 1]),         # 0번은 서 있는 자세라 빼고 회전만 반복
-        ('hit',    'hit_knockback', ALL8),
-        ('death',  'death',         [1, 2, 3, 4, 5, 5, 6, 6], 'ground'),   # 템플릿 falling-back-death (7장). 0번은 서 있는 자세라 뺀다
-    ]),
     # 동료는 날기(wire)·베기(slashQ)·공중(air) 만 쓴다. 나머지 줄은 서 있는 모습으로 채운다
     'ally_red': dict(src='ally_red_src', out='ally_red_px', rows=[
         ('idle',   *STILL),

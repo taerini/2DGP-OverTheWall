@@ -1,3 +1,4 @@
+import json
 import math
 
 import camera
@@ -10,10 +11,28 @@ from config import *
 from giant import floor_of
 from state_machine import StateMachine, wire_fire, arrive, fall, land, tornado
 
-CELL, BASE = 96, 8
-DRAW = 72                    # 화면에 그리는 칸 크기 (96칸을 줄여 키를 약 48px 로 맞춤)
-ROWS = ['idle', 'run', 'wire', 'air', 'slashQ', 'slashW', 'spinE', 'hit', 'death']
-FRAMES = {row: 8 for row in ROWS}   # PixelLab 주인공 시트(hero_px.png): 줄마다 8프레임. air 는 0~3 상승, 4~7 하강
+# 주인공 시트 (resource/hero/, tools/make_hero.py): 애니메이션풍 PixelLab 캐릭터. 줄마다 프레임 수가 다르다 (부드럽게 대부분 16장)
+with open('resource/hero/hero_meta.json') as _f:
+    _META = json.load(_f)
+CELL, BASE = _META['cell'][0], _META['base']
+DRAW = CELL * HERO_HEIGHT / _META['height']   # 화면에 그리는 칸 크기: 서 있는 키가 HERO_HEIGHT 가 되게
+ROWS = [name for name, _ in _META['rows']]
+FRAMES = {name: n for name, n in _META['rows']}   # air 는 앞 절반 상승, 뒤 절반 하강
+
+
+LAUNCH_CROUCH = 7       # launch 줄에서 웅크리는 장 수
+AIR_RISE_V = 650.0      # 이 속도 이상으로 오르면 공중 줄 첫 장, 0 에 가까우면 상승 마지막 장
+AIR_FALL_V = 750.0      # 이 속도 이상으로 떨어지면 하강 마지막 장
+
+
+def smooth(k):
+    """0~1 을 처음과 끝이 부드럽게 잇는다"""
+    return k * k * (3 - 2 * k)
+
+
+def loop(row, t, fps8):
+    """반복 동작의 프레임: 8장 기준 초당 fps8 장 빠르기를 줄 길이에 맞춘다 (16장이면 두 배로 넘겨 한 바퀴 시간이 같다)"""
+    return int(t * fps8 * FRAMES[row] / 8) % FRAMES[row]
 
 WALK_SPEED = 130.0
 RUN_MAX = 440.0
@@ -23,11 +42,9 @@ HIT_DMG = 10.0               # 거인 공격 한 번(세기 1)에 깎이는 체�
 REGEN = 1.5                  # 초당 다시 차는 체력
 REGEN_DELAY = 3.0            # 마지막으로 맞은 뒤 이만큼 지나야 차기 시작한다
 WIRE_COST = 6.0
-HOOK_SPEED = 3400.0
 REEL_SPEED = 780.0
-ATTACK = 40.0                # 처음 공격력 (칼날 강화로 오른다). 목덜미 100%, 발목 30%, 몸통 15%
+ATTACK = 40.0                # 처음 공격력 (칼날 강화로 오른다). 목덜미 100%, 몸통 15%
 Q_COOLDOWN = 0.35
-Q_TIME = 0.26
 TORNADO_CD = Q_COOLDOWN   # 회오리도 Q 처럼 제한 없이 쓴다
 TORNADO_RISE = 0.4
 FORT_DAMAGE = 6.0            # 혼자 요새를 베면 오래 걸린다
@@ -44,11 +61,50 @@ class Ground:
     def enter(self, e):
         p = self.p
         p.vy = 0.0
-        if e[0] == 'LAND' and p.land_speed < -500:
-            effect.steam(p.x, p.y + 4, 3, 10, (200, 200, 200), 14)
+        if e[0] == 'LAND' and p.land_speed < -HERO_LAND_SPEED:
+            # 세게 착지: 빠를수록 깊고 오래 웅크리고, 먼지와 흔들림도 커진다
+            k = min(1.0, (-p.land_speed - HERO_LAND_SPEED) / (HERO_FALL_MAX - HERO_LAND_SPEED))
+            p.land_t = p.land_total = 0.22 + 0.16 * k
+            p.vx *= 0.35
+            for d in (-1, 1):
+                for i in range(2 + int(2 * k)):
+                    effect.add(effect.Puff(p.x + d * (6 + i * 7), p.y + 3, (205, 198, 184), 14 + 7 * i, 0.4,
+                                           d * (70 + 45 * i), 14, 0.55))
+            camera.shake(0.08 + 0.12 * k, 2 + 4 * k)
+            sound.sfx('land')
 
     def exit(self, e):
-        pass
+        self.p.curve_k = self.p.land_t = self.p.recover_t = 0.0
+
+    def curve(self, dt, target):
+        """급커브: 들어가며 감속 → 한가운데서 가장 느림 → 빠져나오며 다시 가속.
+        실제 속력 × 진행 방향의 가로 성분이 화면의 가로 속도다. 도는 중에 원래 쪽을 고르면 되돌아 나온다"""
+        p = self.p
+        was = p.curve_k
+        back = target * p.curve_from > 0
+        k = was + (-dt if back else dt) / HERO_CURVE_TIME
+        if int(k * 16) != int(was * 16):            # 발이 땅을 긁으며 바깥쪽으로 흙먼지가 튄다
+            load = math.sin(math.pi * min(1.0, max(0.0, k)))
+            effect.add(effect.Puff(p.x + p.curve_from * 8, p.y + 3, (205, 198, 184), 10 + 9 * load, 0.3,
+                                   p.curve_from * 55 * load, 16, 0.3 + 0.25 * load))
+        if was < 0.5 <= k:
+            sound.sfx('dash')
+        if k >= 1.0 or k <= 0.0:
+            out = k >= 1.0
+            p.vx = -p.curve_v * HERO_CURVE_EXIT if out else p.curve_v
+            p.face = 1 if p.vx > 0 else -1
+            p.curve_k = 0.0
+            p.run_phase = 0.3                       # 커브 그림 마지막이 달리기 3번째 장과 이어진다
+            p.recover_t = HERO_CURVE_RECOVER if out else 0.0
+        else:
+            p.curve_k = k
+            if k < 0.5:
+                speed = 1 + (HERO_CURVE_MIN - 1) * smooth(k * 2)
+            else:
+                speed = HERO_CURVE_MIN + (HERO_CURVE_EXIT - HERO_CURVE_MIN) * smooth(k * 2 - 1)
+            p.vx = p.curve_v * speed * math.cos(math.pi * smooth(k))
+            p.face = p.curve_from if k < 0.5 else -p.curve_from
+        p.move_x(p.vx * dt)
 
     def do(self, dt):
         # 달리기는 가스를 쓰지 않는다. 땅에 있으면 가스가 천천히 찬다.
@@ -69,9 +125,25 @@ class Ground:
         mx, _ = camera.to_world(*p.mouse)
         dx = mx - p.x
         target = 0.0
-        if abs(dx) > 14:
-            target = math.copysign(min(RUN_MAX, (abs(dx) - 14) * 2.0), dx)
+        if abs(dx) > 4:              # 서 있지 않는다: 목표 바로 앞까지 천천히라도 달린다
+            target = math.copysign(max(HERO_JOG, min(RUN_MAX, abs(dx) * 2.0)), dx)
+        if p.land_t > 0:             # 착지 충격을 받는 동안은 거의 못 나아간다
+            p.land_t = max(0.0, p.land_t - dt)
+            target *= 0.2
+        elif p.curve_k <= 0 and abs(p.vx) >= HERO_CURVE_SPEED and target * p.vx < 0:
+            p.curve_k, p.curve_v, p.curve_from = 1e-6, p.vx, 1 if p.vx > 0 else -1
+            sound.sfx('skid')
+        if p.curve_k > 0:
+            self.curve(dt, target)
+            p.gas = min(p.gas_max, p.gas + 6 * dt)
+            if not map_data.segment_at(p.lane, p.x):
+                p.state_machine.handle_event(('FALL', None))
+            return
         accel = 1700.0 if abs(target) > abs(p.vx) else 2600.0
+        if p.recover_t > 0:          # 커브를 빠져나온 직후: 다시 속도를 붙이는 데 시간이 걸린다
+            p.recover_t = max(0.0, p.recover_t - dt)
+            if target * p.vx > 0 and abs(target) > abs(p.vx):
+                accel = HERO_CURVE_ACCEL
         if p.vx < target:
             p.vx = min(target, p.vx + accel * dt)
         else:
@@ -93,6 +165,10 @@ class Wire:
         p.hook = e[1]
         p.rope = 0.0
         p.reeling = False
+        p.hook_t = 0.0
+        p.launching = p.lane is not None     # 땅에서 걸면 웅크렸다가 튀어 오른다
+        p.hook_time = HERO_WIRE_WINDUP if p.launching else 0.05   # 거리와 상관없이 바로 걸린다
+        p.launch_t = 0.0
         p.face = 1 if p.hook[0] >= p.x else -1
 
     def exit(self, e):
@@ -105,10 +181,15 @@ class Wire:
         dist = math.hypot(hx - cx, hy - cy)
         if not p.reeling:
             # 갈고리가 날아가는 동안에는 하던 움직임을 이어 간다
-            p.rope += HOOK_SPEED * dt
-            if p.rope >= dist:
+            p.hook_t += dt
+            p.rope = dist * min(1.0, p.hook_t / p.hook_time)
+            if p.hook_t >= p.hook_time:
                 p.reeling = True
-                p.reel_speed = max(360.0, math.hypot(p.vx, p.vy))
+                p.reel_speed = max(620.0 if p.launching else 360.0, math.hypot(p.vx, p.vy))
+                if p.launching:
+                    p.launch_t = HERO_WIRE_SPRING
+                    effect.add(effect.Puff(p.x, p.y + 3, (205, 198, 184), 24, 0.32, 0, 18, 0.55))
+                    sound.sfx('dash')
             if p.lane is None:
                 p.vy -= GRAVITY * dt
                 p.move_x(p.vx * dt)
@@ -117,9 +198,17 @@ class Wire:
                 p.vx *= 0.9
             return
         p.lane = None
+        p.launch_t = max(0.0, p.launch_t - dt)
         top = REEL_SPEED * p.reel_mult
         p.reel_speed = min(top, p.reel_speed + 4200 * dt)
         step = p.reel_speed * dt
+        if p.slash_t > 0:
+            k = 1 - p.slash_t / p.slash_total
+            if HERO_WIRE_SLASH_HIT < k < HERO_WIRE_SLASH_HIT + 0.2:
+                step *= HERO_WIRE_SLASH_DASH  # 내리치는 순간 앞으로 튀어 나간다
+                if not p.slash_struck:
+                    p.slash_struck = True
+                    camera.shake(0.12, 5)
         ux, uy = (hx - cx) / max(dist, 1e-3), (hy - cy) / max(dist, 1e-3)
         p.vx, p.vy = ux * p.reel_speed, uy * p.reel_speed
         if step >= dist - 14:
@@ -154,7 +243,7 @@ class Air:
         target = max(-260.0, min(260.0, (mx - p.x) * 1.5))
         if p.hit_t <= 0 and not p.dead:
             p.vx += max(-420 * dt, min(420 * dt, target - p.vx))
-        p.vy = max(-900.0, p.vy - GRAVITY * dt)
+        p.vy = max(-HERO_FALL_MAX, p.vy - GRAVITY * (HERO_FALL_GRAVITY if p.vy < 0 else 1.0) * dt)
         p.move_x(p.vx * dt)
         y_prev = p.y
         p.y += p.vy * dt
@@ -210,7 +299,7 @@ class Tornado:
 
 class Player:
     def __init__(self):
-        self.image = render.image('hero_px.png')
+        self.image = render.image('hero/hero.png')
         self.ring = render.image('ring_dash.png')
         self.x, self.y = WALL_X + 70.0, float(LANE_Y[0])
         self.vx = self.vy = 0.0
@@ -221,6 +310,16 @@ class Player:
         self.preview = None
         self.land_speed = 0.0
         self.anim_t = 0.0
+        self.run_phase = 0.0          # 달리기 그림 진행: 달린 거리로 넘어간다
+        self.turn_t = 0.0             # 방향 전환 그림이 남은 시간
+        self.slash_t = 0.0            # 칼을 휘두르는 남은 시간
+        self.slash_total = HERO_SLASH_TIME   # 이번 베기의 전체 시간
+        self.slash_struck = False     # 와이어 베기: 내리치는 순간을 지났나
+        self.curve_k, self.curve_v, self.curve_from = 0.0, 0.0, 1   # 커브: 진행 0~1 (0 이면 안 도는 중), 처음 속도, 달리던 방향
+        self.recover_t = 0.0          # 커브 뒤 다시 가속하는 남은 시간
+        self.land_t, self.land_total = 0.0, 1.0                  # 세게 착지: 남은 시간, 전체 시간
+        self.hook_t, self.hook_time, self.launch_t = 0.0, 1.0, 0.0
+        self.launching = False        # 와이어: 땅에서 웅크렸다 튀어 오르는 중인가
         self.hidden = False           # 시작 장면: 성문이 열리기 전에는 보이지 않는다
         self.auto_x = None            # 시작 장면: 마우스 대신 이 x 를 향해 걷는다
 
@@ -235,14 +334,11 @@ class Player:
         self.blade = 1.0
         self.gas_cost = 1.0
         self.reel_mult = 1.0
-        self.reach = 700.0
         self.has_tornado = False
         self.tornado_cd = TORNADO_CD
 
         self.cool = {'Q': 0.0, 'W': 0.0}
-        self.action, self.action_t = None, 0.0
         self.invuln, self.hit_t = 0.0, 0.0
-        self.no_gas_t = 0.0
 
         self.GROUND = Ground(self)
         self.WIRE = Wire(self)
@@ -254,7 +350,7 @@ class Player:
                 self.GROUND: {wire_fire: self.WIRE, fall: self.AIR, tornado: self.TORNADO},
                 self.WIRE: {wire_fire: self.WIRE, arrive: self.AIR, fall: self.AIR, tornado: self.TORNADO},
                 self.AIR: {wire_fire: self.WIRE, land: self.GROUND, tornado: self.TORNADO},
-                self.TORNADO: {arrive: self.AIR, fall: self.AIR},
+                self.TORNADO: {wire_fire: self.WIRE, arrive: self.AIR, fall: self.AIR},
             }
         )
 
@@ -277,14 +373,10 @@ class Player:
 
     # ------------------------------------------------ 입력
     def fire_wire(self, sx, sy):
-        if self.state_machine.cur_state is self.TORNADO:
-            return
-        if self.gas < WIRE_COST * self.gas_cost:
-            self.no_gas_t = 0.8
-            return
+        # 클릭하면 언제든 바로 와이어를 건다 (가스가 없어도, 회오리 베기 중이어도)
         cx, cy = self.center()
         wx, wy = camera.to_world(sx, sy)
-        target = map_data.find_anchor(cx, cy, wx, wy, self.reach)
+        target = map_data.find_anchor(cx, cy, wx, wy)
         if target is None:
             return
         self.use_gas(WIRE_COST)
@@ -292,7 +384,7 @@ class Player:
         self.state_machine.handle_event(('WIRE', target))
 
     def slash(self):
-        """Q: 지금 있는 층에 따라 목덜미 / 발목 / 몸통을 벤다."""
+        """Q: 달리거나 날아가는 그대로 칼을 휘두른다. 지금 있는 층에 따라 목덜미 또는 몸통에 맞는다."""
         if self.cool['Q'] > 0 or self.state_machine.cur_state is self.TORNADO:
             return
         self.cool['Q'] = Q_COOLDOWN
@@ -309,16 +401,17 @@ class Player:
                     part = 'neck'
             if part is None:
                 continue
+            if part == 'ankle':           # 주인공은 발목을 베지 않는다: 발치에서 베면 몸통에 맞는다
+                part = 'body'
             key = (PART_ORDER[part], abs(g.x - self.x))
             if best_key is None or key < best_key:
                 best, best_key = (g, part), key
-        low = best is not None and best[1] == 'ankle'
-        self.action, self.action_t = ('W' if low else 'Q'), Q_TIME
-        self.anim_t = 0.0
+        on_wire = self.state_machine.cur_state is self.WIRE and self.reeling
+        self.slash_total = HERO_WIRE_SLASH_TIME if on_wire else HERO_SLASH_TIME
+        self.slash_t = self.slash_total
+        self.slash_struck = False
         sound.sfx('slash')
-        if low:
-            effect.add(effect.Slash(self, 'W', self.face, 90, 8))
-        else:
+        if self.curve_k > 0 or self.land_t > 0 or self.turn_t > 0:   # 칼 휘두르는 그림을 못 쓰는 동작 중에는 궤적만
             effect.add(effect.Slash(self, 'Q', self.face, 110, 22))
         if best:
             g, part = best
@@ -346,7 +439,6 @@ class Player:
         if best is None:
             return
         self.cool['W'] = self.tornado_cd
-        self.action = None
         self.state_machine.handle_event(('TORNADO', best))
 
     def hurt(self, src_x, n=1):
@@ -357,7 +449,6 @@ class Player:
         self.safe_t = 0.0
         self.invuln = 1.0
         self.hit_t = 0.45
-        self.action = None
         camera.shake(0.25)
         sound.sfx('player_hurt')
         d = 1 if self.x >= src_x else -1
@@ -388,50 +479,89 @@ class Player:
             self.cool[k] = max(0.0, self.cool[k] - dt)
         self.invuln = max(0.0, self.invuln - dt)
         self.hit_t = max(0.0, self.hit_t - dt)
+        if self.slash_t > 0:
+            self.slash_t = max(0.0, self.slash_t - dt)
+            if self.slash_t <= 0:
+                self.run_phase = 0.3          # 베기 그림의 끝이 달리기 3번째 장과 이어진다
         # 맞지 않고 버티는 동안 체력이 천천히 다시 찬다
         self.safe_t += dt
         if not self.dead and self.safe_t >= REGEN_DELAY:
             self.hp = min(self.max_hp, self.hp + REGEN * dt)
-        self.no_gas_t = max(0.0, self.no_gas_t - dt)
-        if self.action:
-            self.action_t -= dt
-            if self.action_t <= 0:
-                self.action = None
         if self.x < WALL_X + 350 or ZONES[zone_of(self.x)].get('rest'):
             self.gas = min(self.gas_max, self.gas + 30 * dt)
+        was_face = self.face
         self.state_machine.update(dt)
+        self.run_phase = (self.run_phase + max(abs(self.vx), HERO_JOG) * dt / HERO_STRIDE) % 1.0
+        self.update_turn(dt, was_face)
 
         self.preview = None
-        if self.gas >= WIRE_COST * self.gas_cost:
-            cx, cy = self.center()
-            wx, wy = camera.to_world(*self.mouse)
-            self.preview = map_data.find_anchor(cx, cy, wx, wy, self.reach)
+        cx, cy = self.center()
+        wx, wy = camera.to_world(*self.mouse)
+        self.preview = map_data.find_anchor(cx, cy, wx, wy)
 
     # ------------------------------------------------ 그리기
+    def update_turn(self, dt, was_face):
+        """땅에서 보는 방향이 바뀌면 앞모습을 거쳐 돈다. 도는 중에 다시 바꾸면 지금 모습에서 되돌아간다"""
+        self.turn_t = max(0.0, self.turn_t - dt)
+        if self.face != was_face:
+            on_ground = self.state_machine.cur_state is self.GROUND
+            self.turn_t = HERO_TURN_TIME - self.turn_t if on_ground and not self.dead and self.curve_k <= 0 else 0.0
+
+    def swing_frame(self):
+        """칼 휘두르기 진행 칸. 앞쪽을 빠르게 넘겨 키를 누르자마자 칼이 나간다"""
+        n = FRAMES['slash']
+        return min(n - 1, int((1 - self.slash_t / self.slash_total) ** 0.7 * n))
+
+    def wire_slash_frame(self):
+        """와이어 베기 칸: 젖히는 앞부분(9장)은 빠르게, 내리치고 돌아오는 뒷부분은 천천히"""
+        n = FRAMES['wire_slash']
+        k = 1 - self.slash_t / self.slash_total
+        if k < HERO_WIRE_SLASH_HIT:
+            return int(k / HERO_WIRE_SLASH_HIT * 9)
+        return min(n - 1, 9 + int((k - HERO_WIRE_SLASH_HIT) / (1 - HERO_WIRE_SLASH_HIT) * (n - 9)))
+
     def pick_frame(self):
         st = self.state_machine.cur_state
         if self.dead:                     # 뒤로 넘어가는 모션 뒤 누운 자세 그대로
             return 'death', min(FRAMES['death'] - 1, int(self.death_t / DEATH_ANIM * FRAMES['death'])), 0.0
         if st is self.TORNADO:
-            return 'spinE', int(self.anim_t * 30) % 8, 0.0
+            return 'spinE', loop('spinE', self.anim_t, 30), 0.0
         if self.hit_t > 0:
-            return 'hit', min(7, int((0.45 - self.hit_t) / 0.45 * 8)), 0.0
-        if self.action:
-            k = 1 - self.action_t / Q_TIME
-            if st is self.AIR or st is self.WIRE:
-                # 공중(와이어로 나는 중 포함): 몸을 한 바퀴 돌리며 벤다. 끝나면 다시 날기 자세로 (속도는 그대로)
-                return 'spinE', min(7, int(k * 8)), 0.0
-            row = {'Q': 'slashQ', 'W': 'slashW'}[self.action]
-            return row, min(FRAMES[row] - 1, int(k * FRAMES[row])), 0.0
+            return 'hit', min(FRAMES['hit'] - 1, int((0.45 - self.hit_t) / 0.45 * FRAMES['hit'])), 0.0
+        if self.curve_k > 0 and st is self.GROUND:
+            return 'curve', min(FRAMES['curve'] - 1, int(smooth(self.curve_k) * FRAMES['curve'])), 0.0
+        if self.land_t > 0 and st is self.GROUND:
+            k = 1 - self.land_t / self.land_total
+            return 'land', min(FRAMES['land'] - 1, int(k * FRAMES['land'])), 0.0
+        if st is self.WIRE and self.launching:
+            if not self.reeling:              # 웅크리며 힘을 모은다
+                return 'launch', min(LAUNCH_CROUCH - 1, int(self.hook_t / self.hook_time * LAUNCH_CROUCH)), 0.0
+            if self.launch_t > 0:             # 스프링처럼 튀어 오른다
+                n = FRAMES['launch'] - LAUNCH_CROUCH
+                return 'launch', LAUNCH_CROUCH + min(n - 1, int((1 - self.launch_t / HERO_WIRE_SPRING) * n)), 0.0
+        if self.turn_t > 0 and st is self.GROUND:
+            n = FRAMES['curve']               # 느릴 때도 서지 않고, 다리를 굴리며 도는 그림을 쓴다
+            return 'curve', min(n - 1, int((1 - self.turn_t / HERO_TURN_TIME) * n)), 0.0
         if st is self.WIRE and self.reeling:
             vx, vy = self.vx * self.face, self.vy
             rad = max(-0.9, min(0.9, math.atan2(vy, max(1.0, vx)) - 0.05))
-            return 'wire', int(self.anim_t * 20) % 8, rad
+            if self.slash_t > 0:              # 와이어로 날아가며 벤다
+                return 'wire_slash', self.wire_slash_frame(), rad
+            return 'wire', loop('wire', self.anim_t, 20), rad
+        if self.slash_t > 0:
+            return 'slash', self.swing_frame(), 0.0
         if st is self.AIR or st is self.WIRE:
-            return 'air', (0 if self.vy > 0 else 4) + int(self.anim_t * 12) % 4, 0.0
-        if abs(self.vx) > 25:
-            return 'run', int(self.anim_t * (8 + abs(self.vx) / 22)) % 8, 0.0
-        return 'idle', int(self.anim_t * 8) % 8, 0.0
+            # 프레임을 속도로 고른다: 막 뛰어오를 땐 앞 절반의 처음(웅크리기 시작) → 꼭대기에서 끝(다 웅크림),
+            # 떨어지기 시작하면 뒤 절반의 처음 → 빨리 떨어질수록 끝(다리를 펴고 팔을 벌림)
+            if self.vy < -HERO_LAND_SPEED:    # 빠르게 떨어지는 중
+                return 'fall', loop('fall', self.anim_t, 10), 0.0
+            half = FRAMES['air'] // 2
+            if self.vy > 0:
+                k = 1 - min(1.0, self.vy / AIR_RISE_V)
+                return 'air', min(half - 1, int(k * half)), 0.0
+            k = min(1.0, -self.vy / AIR_FALL_V)
+            return 'air', half + min(half - 1, int(k * half)), 0.0
+        return 'run', int(self.run_phase * FRAMES['run']) % FRAMES['run'], 0.0   # 서 있는 그림은 쓰지 않는다
 
     def draw(self):
         if self.hidden:
@@ -459,14 +589,23 @@ class Player:
 
         row, frame, rad = self.pick_frame()
         sx, sy = camera.to_screen(self.x, self.y)
-        r = ROWS.index(row)
         alpha = 0.35 if self.invuln > 0 and not self.dead and int(self.invuln * 12) % 2 else 1.0
         self.image.opacify(alpha)
         flip = '' if self.face > 0 else 'h'
-        self.image.clip_composite_draw(frame * CELL, (len(ROWS) - 1 - r) * CELL, CELL, CELL,
-                                       rad * self.face, flip, sx, sy + (CELL / 2 - BASE) * DRAW / CELL, DRAW, DRAW)
+        size, angle = DRAW, rad * self.face
+        if row == 'curve':                # 오른쪽으로 달리다 왼쪽으로 도는 그림: 반대면 통째로 뒤집는다
+            came_from = self.curve_from if self.curve_k > 0 else -self.face
+            flip = '' if came_from > 0 else 'h'
+            arc = math.sin(math.pi * smooth(self.curve_k))
+            size = DRAW * (1 + HERO_CURVE_DEPTH * arc)    # 원을 돌며 화면 쪽으로 다가오고
+            sy -= HERO_CURVE_DROP * arc                   # 조금 아래로 내려왔다가 돌아간다
+            angle = came_from * HERO_CURVE_LEAN * arc     # 몸은 커브 안쪽으로 기운다
+        h = (CELL / 2 - BASE) * size / CELL           # 발에서 그림 가운데까지: 기울어도 발은 제자리
+        px, py = sx - math.sin(angle) * h, sy + math.cos(angle) * h
+        if row == 'wire_slash':           # 날아가는 몸은 몸 가운데를 축으로 돈다
+            px, py = sx, sy + h
+        self.image.clip_composite_draw(frame * CELL, (len(ROWS) - 1 - ROWS.index(row)) * CELL, CELL, CELL,
+                                       angle, flip, px, py, size, size)
         self.image.opacify(1.0)
 
         # 생명·가스는 왼쪽 위 HUD 에만 보인다 (머리 위 막대는 없앴다)
-        if self.no_gas_t > 0:
-            render.text('가스 부족', sx, sy + 62, 14, (255, 140, 110), 'center', alpha=min(1.0, self.no_gas_t * 2))

@@ -1,7 +1,7 @@
 """벽 너머 리소스 생성기.
 
 모든 이미지는 외부 리소스 없이 이 스크립트가 직접 그린다.
-실행: python tools/make_sprites.py  →  resource/*.png, resource/giant_meta.json, docs/hero_sheet_guide.png
+실행: python tools/make_sprites.py  →  resource/*.png, resource/giant_meta.json
 """
 import json
 import math
@@ -12,7 +12,6 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'resource')
-DOCS = os.path.join(ROOT, 'docs')
 FONT_KR = 'C:/Windows/Fonts/malgunbd.ttf'
 
 S = 4                    # 슈퍼샘플링 배율 (크게 그리고 줄여서 부드럽게)
@@ -396,42 +395,6 @@ def make_ally(poses=None):
         rows = [[render_hero_cell(P, HERO_CELL, 1.0, None, wear, hair) for P in poses[name]]
                 for name, n in HERO_ROWS]
         save(make_sheet(rows, HERO_CELL, HERO_CELL), name_)
-
-
-def make_hero():
-    poses = hero_poses()
-    rows = []
-    for name, n in HERO_ROWS:
-        assert len(poses[name]) == n, name
-        rows.append([render_hero_cell(P, HERO_CELL, 1.0) for P in poses[name]])
-    save(make_sheet(rows, HERO_CELL, HERO_CELL), 'hero.png')
-    make_ally(poses)
-
-    # 설명용 큰 시트 (128px 칸)
-    big = 128
-    label_w = 220
-    cols = max(n for _, n in HERO_ROWS)
-    guide = Image.new('RGBA', (label_w + cols * big, 50 + len(HERO_ROWS) * big), (216, 220, 226, 255))
-    d = ImageDraw.Draw(guide)
-    f_title = ImageFont.truetype(FONT_KR, 20)
-    f_lab = ImageFont.truetype(FONT_KR, 16)
-    d.text((14, 12), '주인공 · 게임용 64×64 칸 (키 약 38px) · 설명용 2배 · 빨간 점선 = 발 기준선', font=f_title, fill=(20, 20, 24))
-    names = {'idle': '대기', 'run': '달리기', 'wire': '와이어 비행', 'air': '공중',
-             'slashQ': '목덜미 베기 Q', 'slashW': '발목 베기 W', 'spinE': '회전 베기 E', 'hit': '피격'}
-    for r, (name, n) in enumerate(HERO_ROWS):
-        y0 = 50 + r * big
-        d.text((14, y0 + big / 2 - 20), names[name], font=f_lab, fill=(20, 20, 24))
-        d.text((14, y0 + big / 2 + 2), f'{name} · {n}프레임', font=f_lab, fill=(90, 94, 100))
-        for c, P in enumerate(poses[name]):
-            x0 = label_w + c * big
-            d.rectangle((x0, y0, x0 + big - 1, y0 + big - 1), fill=(200, 205, 212) if c % 2 else (206, 211, 218))
-            fr = render_hero_cell(P, big, 2.0)
-            guide.paste(fr, (x0, y0), fr)
-            by = y0 + big - HERO_BASE * 2
-            for xx in range(x0, x0 + big, 6):
-                d.line((xx, by, xx + 3, by), fill=(200, 80, 90))
-    os.makedirs(DOCS, exist_ok=True)
-    save(guide, 'hero_sheet_guide.png', DOCS)
 
 
 # ================================================================ 거인
@@ -1826,7 +1789,7 @@ def make_backgrounds():
 
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
-    make_hero()
+    make_ally()
     make_giants()
     make_giant_kinds()
     make_props()

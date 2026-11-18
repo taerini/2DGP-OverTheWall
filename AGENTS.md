@@ -9,7 +9,7 @@ pip install pico2d
 python main.py
 ```
 - 리소스 재생성: `pip install pillow` 후 `python tools/make_sprites.py`
-  → `resource/*.png`, `resource/*_meta.json`, `docs/hero_sheet_guide.png`
+  → `resource/*.png`, `resource/*_meta.json`
 - 모든 이미지는 외부 리소스 없이 `tools/make_sprites.py`가 코드로 그린다. 그림을 바꿀 때는 png를 직접 고치지 말고 이 스크립트를 고친 뒤 다시 실행한다.
 - Windows 환경. 폰트 경로는 `C:/Windows/Fonts/` (config.py).
 

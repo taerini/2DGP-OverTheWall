@@ -55,19 +55,27 @@ def landing_lane(x, y_prev, y_now):
     return None
 
 
-def find_anchor(px, py, cx, cy, reach):
-    """와이어가 닿는 나무 중 클릭한 곳에서 가장 가까운 나무에, 클릭한 높이로 건다.
-    높이는 그 나무의 걸 수 있는 범위(길 위 ANCHOR_LOW ~ ANCHOR_H) 안으로 맞춘다."""
+def floor_at(y):
+    """높이 y 가 몇 층인가 (0~4). 길 윗면 사이를 한 층으로 친다 (맨 아래 길 아래는 0층, 맨 위 길 위는 4층)"""
+    f = 0
+    for i in range(5):
+        if y >= LANE_Y[i]:
+            f = i
+    return f
+
+
+def find_anchor(px, py, cx, cy):
+    """클릭한 높이(cy)가 속한 층의 나무 중, 클릭한 곳(cx)에서 가장 가까운 나무에 건다. 사거리는 없다.
+    거는 높이는 클릭한 높이를 그 나무의 걸 수 있는 범위(길 위 ANCHOR_LOW ~ ANCHOR_H) 안으로 맞춘 곳.
+    주인공 바로 곁(30px 안)의 나무는 걸어도 움직이지 않으니 건너뛴다."""
     best = None
-    for row in anchors:
-        for ax, ly, z in row:
-            ay = max(ly + ANCHOR_LOW, min(ly + ANCHOR_H, cy))
-            d = math.hypot(ax - px, ay - py)
-            if d > reach or d < 30:
-                continue
-            gap = math.hypot(ax - cx, ay - cy)
-            if best is None or gap < best[0]:
-                best = (gap, (ax, ay))
+    for ax, ly, z in anchors[floor_at(cy)]:
+        ay = max(ly + ANCHOR_LOW, min(ly + ANCHOR_H, cy))
+        if math.hypot(ax - px, ay - py) < 30:
+            continue
+        gap = abs(ax - cx)
+        if best is None or gap < best[0]:
+            best = (gap, (ax, ay))
     return best[1] if best else None
 
 

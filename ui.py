@@ -189,4 +189,4 @@ class Hud:
         if boss.armor > 0:
             render.text(f'껍질 {boss.armor} · 발목을 베어 껍질을 깨야 목덜미가 통한다', SCREEN_W / 2, 114, 13, (230, 200, 160), 'center')
         elif boss.kind == 'smart':
-            render.text('목덜미를 손으로 가린다 · 발목을 베어 주저앉힌 뒤 베기', SCREEN_W / 2, 114, 13, (230, 200, 160), 'center')
+            render.text('목덜미를 손으로 가린다 · 손을 내린 틈에 베기', SCREEN_W / 2, 114, 13, (230, 200, 160), 'center')

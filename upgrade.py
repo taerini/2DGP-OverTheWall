@@ -22,7 +22,6 @@ def gas_tank(p):
 
 def wire(p):
     p.reel_mult *= 1.3
-    p.reach += 150
 
 
 MAX_ALLIES = 4
@@ -94,7 +93,7 @@ UPGRADES = [
     ('칼날 강화', '공격력 +15%', blade, 9, None),
     ('가스 절약', '와이어 가스 소모 -25%', gas_save, 3, None),
     ('가스통 확장', '최대 가스 +35, 가득 채움', gas_tank, 5, None),
-    ('와이어 강화', '감는 속도 +30%, 사거리 +150', wire, 4, None),
+    ('와이어 강화', '감는 속도 +30%', wire, 4, None),
     ('동료: 리바이', '작은 거인의 목덜미를 벤다. 큰 거인은 발목을 베어 주저앉힌다', levi, 1, unique(Levi)),
     ('동료: 미카사', '목 높이로 돌진하며 작은 거인을 최대 3마리 벤다', mikasa, 1, unique(Mikasa)),
     ('동료 치료', '모든 동료 체력 회복, 최대 체력 +2, 후퇴한 동료 즉시 복귀', ally_heal, 3, has_allies),
