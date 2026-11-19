@@ -90,6 +90,15 @@ def neck_juice(g, dmg, killed, face, big=True):
         camera.shake(0.16, 7)
 
 
+def body_juice(g, y, face, killed):
+    """몸통을 벴을 때의 타격감: 짧게 멈칫, 작은 흔들림, 베인 자리에서 튀는 불꽃, 묵직한 소리"""
+    global hitstop, flash_t
+    sound.sfx('slash_crit')
+    effect.add(effect.Spray(g.x - face * g.size * 0.08, y, (0.0 if face > 0 else math.pi) + 0.3 * face, 12))
+    hitstop = max(hitstop, 0.16 if killed else HITSTOP_BODY)
+    camera.shake(0.1, 4)
+
+
 DEATH_FADE = (0.5, 2.2)     # 쓰러진 뒤 (이만큼 지나서, 이 시간 동안) 화면이 점점 어두워진다
 DEATH_END = 3.3             # 쓰러진 뒤 결과 화면으로 넘어가기까지 (어두워진 뒤 잠깐 머문다)
 

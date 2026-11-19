@@ -164,6 +164,7 @@ class Giant:
         self.seeds_left = 0
         self.steam_t = 0.0
         self.flash_t = 0.0
+        self.flinch_t, self.flinch_px = 0.0, 0.0   # 맞아서 움찔: 남은 시간, 밀리는 거리 (+ 오른쪽)
         self.crit = False                        # 마지막으로 맞은 공격이 치명타였나
         self.waiting = False                     # 미리 서 있는 거인: 주인공이 다가올 때까지 제자리
         self.running = False
@@ -445,6 +446,11 @@ class Giant:
                 self.guard_t = GUARD_REACT
         return dmg, False
 
+    def flinch(self, d, big=False):
+        """주인공 칼에 맞아 d 쪽으로 움찔한다 (그림만 밀렸다 돌아온다)"""
+        self.flinch_t = GIANT_FLINCH_TIME
+        self.flinch_px = d * self.size * GIANT_FLINCH * (2 if big else 1)
+
     def die(self):
         # 주저앉은 채 죽으면 일어서는 장면 없이 무릎 꿇은 모션부터 엎어진다
         self.state, self.state_t = 'dead', DEATH_FRAME * 2 if self.kneel_t > 0 else 0.0
@@ -484,6 +490,7 @@ class Giant:
         self.anim_t += dt
         self.state_t += dt if self.state in ('dead', 'wall') else -dt
         self.flash_t = max(0.0, self.flash_t - dt)
+        self.flinch_t = max(0.0, self.flinch_t - dt)
         self.grab_cd = max(0.0, self.grab_cd - dt)
         self.guard_t = max(0.0, self.guard_t - dt)
         self.swat_cd = max(0.0, self.swat_cd - dt)
@@ -880,6 +887,8 @@ class Giant:
                 img = self.sheet_flash
         render.tint(img, skin, alpha)
         sx, sy = camera.to_screen(self.x, self.y)
+        if self.flinch_t > 0:
+            sx += self.flinch_px * (self.flinch_t / GIANT_FLINCH_TIME) ** 2   # 확 밀렸다가 돌아온다
         if img is self.sheet_armor:
             # 갑옷 시트는 줄 구성과 프레임 수, 칸 크기가 달라서 따로 맞춘다
             m = ARMOR_META

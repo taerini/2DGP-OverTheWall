@@ -29,6 +29,17 @@ HERO_CURVE_LEAN = 0.22        # 커브 안쪽으로 몸을 기울이는 각도 (
 HERO_CURVE_DEPTH = 0.16       # 커브 한가운데서 화면 쪽으로 다가오며 커 보이는 정도
 HERO_CURVE_DROP = 7.0         # 화면 쪽으로 다가오며 아래로 내려오는 높이 (px)
 HERO_SLASH_TIME = 0.34        # 칼을 휘두르는 시간 (초)
+HERO_SLASH_HIT = 0.3          # 그중 칼이 닿아 피해가 들어가는 시점 (0~1)
+HERO_HIT_SLASH_TIME = 0.55    # 땅에서 맞출 거인이 있을 때: 앞으로 도약해 베고 착지해 달려 나가기까지 (초)
+HERO_HIT_SLASH_HIT = 0.3      # 그중 칼이 닿는 시점 (0~1). 도약하며 칼을 뻗는 7장은 이 안에 빠르게 지나간다
+HERO_LEAP_SPEED = 360.0       # 도약하는 동안 앞으로 나아가는 속도 (달리던 속도가 더 빠르면 그대로)
+HERO_LEAP_LIFT = 6.0         # 그림 속 도약에 더해 몸을 띄우는 높이 (px)
+# 맞췄을 때의 타격감 (헛스윙이면 아무것도 안 한다)
+HERO_IMPACT_TIME = 0.14       # 도약 베기 뒤 착지해 버티는 동안 느려지는 시간 (초). 끝나면 다시 가속한다
+HERO_IMPACT_SLOW = 0.6        # 그동안 달리는 속도 배율
+HITSTOP_BODY = 0.055          # 몸통을 베었을 때 멈칫하는 시간 (목덜미는 play_mode.neck_juice)
+GIANT_FLINCH_TIME = 0.18      # 맞은 거인이 움찔하는 시간
+GIANT_FLINCH = 0.03           # 움찔하며 밀리는 거리: 키에 대한 비율 (목덜미는 두 배)
 HERO_WIRE_SLASH_TIME = 0.46   # 와이어로 날며 크게 베는 시간 (초)
 HERO_WIRE_SLASH_HIT = 0.3     # 그중 칼을 내리치는 시점 (0~1). 앞쪽 젖히는 동작은 빠르게 지나간다
 HERO_WIRE_SLASH_DASH = 1.45   # 내리치는 순간 앞으로 튀어 나가는 속도 배율

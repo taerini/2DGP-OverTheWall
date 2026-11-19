@@ -21,6 +21,8 @@ FRAMES = {name: n for name, n in _META['rows']}   # air 는 앞 절반 상승, �
 
 
 LAUNCH_CROUCH = 7       # launch 줄에서 웅크리는 장 수
+LEAP_WIND = 6           # hit_slash 줄: 도약하며 칼을 뻗는 장 수 (그다음 장이 휘두르는 장)
+LEAP_AIR = (2, 10)      # hit_slash 줄: 발이 떠 있는 장 (이 사이 포물선으로 띄운다, 10번에 착지)
 AIR_RISE_V = 650.0      # 이 속도 이상으로 오르면 공중 줄 첫 장, 0 에 가까우면 상승 마지막 장
 AIR_FALL_V = 750.0      # 이 속도 이상으로 떨어지면 하강 마지막 장
 
@@ -74,7 +76,8 @@ class Ground:
             sound.sfx('land')
 
     def exit(self, e):
-        self.p.curve_k = self.p.land_t = self.p.recover_t = 0.0
+        self.p.curve_k = self.p.land_t = self.p.recover_t = self.p.impact_t = 0.0
+        self.p.leaping = False
 
     def curve(self, dt, target):
         """급커브: 들어가며 감속 → 한가운데서 가장 느림 → 빠져나오며 다시 가속.
@@ -122,6 +125,17 @@ class Ground:
             if not map_data.segment_at(p.lane, p.x):
                 p.state_machine.handle_event(('FALL', None))
             return
+        if p.leaping:
+            if p.slash_t > 0 and p.slash_row == 'hit_slash' and p.hit_slash_pos() < LEAP_AIR[1]:
+                p.move_x(p.vx * dt)             # 공중: 마우스와 상관없이 도약한 속도 그대로
+                if not map_data.segment_at(p.lane, p.x):
+                    p.leaping = False
+                    p.state_machine.handle_event(('FALL', None))
+                return
+            p.leaping = False                   # 착지: 앞발로 받으며 잠깐 느려졌다가 다시 달린다
+            p.impact_t = HERO_IMPACT_TIME
+            effect.add(effect.Puff(p.x, p.y + 3, (205, 198, 184), 18, 0.35, -p.face * 80, 12, 0.5))
+            sound.sfx('land')
         mx, _ = camera.to_world(*p.mouse)
         dx = mx - p.x
         target = 0.0
@@ -130,6 +144,11 @@ class Ground:
         if p.land_t > 0:             # 착지 충격을 받는 동안은 거의 못 나아간다
             p.land_t = max(0.0, p.land_t - dt)
             target *= 0.2
+        elif p.impact_t > 0:         # 베어서 칼이 걸렸다: 발에 무게가 실려 확 느려진다
+            p.impact_t = max(0.0, p.impact_t - dt)
+            target *= HERO_IMPACT_SLOW
+            if p.impact_t <= 0:
+                p.recover_t = HERO_CURVE_RECOVER   # 다시 속도를 붙인다
         elif p.curve_k <= 0 and abs(p.vx) >= HERO_CURVE_SPEED and target * p.vx < 0:
             p.curve_k, p.curve_v, p.curve_from = 1e-6, p.vx, 1 if p.vx > 0 else -1
             sound.sfx('skid')
@@ -315,6 +334,13 @@ class Player:
         self.slash_t = 0.0            # 칼을 휘두르는 남은 시간
         self.slash_total = HERO_SLASH_TIME   # 이번 베기의 전체 시간
         self.slash_struck = False     # 와이어 베기: 내리치는 순간을 지났나
+        self.slash_hit = None         # 이번 베기에 맞을 (거인, 부위). 칼이 닿는 순간 피해가 들어간다
+        self.slash_at = HERO_SLASH_HIT   # 칼이 닿는 시점 (0~1)
+        self.slash_row = 'slash'      # 이번 베기 그림 줄: 헛스윙 slash, 맞출 때 hit_slash, 와이어 wire_slash
+        self.slash_fort = False       # 이번 베기가 요새에 닿는가
+        self.slash_done = True        # 이번 베기의 피해를 이미 넣었나
+        self.impact_t = 0.0           # 도약 베기 뒤 착지해 버티는 남은 시간
+        self.leaping = False          # 도약 베기로 공중에 떠 있는 중
         self.curve_k, self.curve_v, self.curve_from = 0.0, 0.0, 1   # 커브: 진행 0~1 (0 이면 안 도는 중), 처음 속도, 달리던 방향
         self.recover_t = 0.0          # 커브 뒤 다시 가속하는 남은 시간
         self.land_t, self.land_total = 0.0, 1.0                  # 세게 착지: 남은 시간, 전체 시간
@@ -407,20 +433,52 @@ class Player:
             if best_key is None or key < best_key:
                 best, best_key = (g, part), key
         on_wire = self.state_machine.cur_state is self.WIRE and self.reeling
-        self.slash_total = HERO_WIRE_SLASH_TIME if on_wire else HERO_SLASH_TIME
+        busy = self.curve_k > 0 or self.land_t > 0 or self.turn_t > 0
+        if on_wire:
+            self.slash_row, self.slash_total, self.slash_at = 'wire_slash', HERO_WIRE_SLASH_TIME, HERO_WIRE_SLASH_HIT
+        elif best and self.state_machine.cur_state is self.GROUND and not busy:
+            # 땅에서 맞출 거인이 있으면 달리던 그대로가 아니라 살짝 뛰어올라 몸을 실어 벤다
+            self.slash_row, self.slash_total, self.slash_at = 'hit_slash', HERO_HIT_SLASH_TIME, HERO_HIT_SLASH_HIT
+            g = best[0]
+            self.face = 1 if (g.nape()[0] if best[1] == 'neck' else g.x) >= self.x else -1
+            self.cool['Q'] = max(Q_COOLDOWN, HERO_HIT_SLASH_TIME * 0.8)   # 착지하기 전엔 다시 베지 않는다
+            keep = abs(self.vx) if self.vx * self.face > 0 else 0.0
+            self.vx = self.face * max(keep, HERO_LEAP_SPEED)            # 앞으로 도약
+            self.leaping = True
+            effect.add(effect.Puff(self.x - self.face * 6, self.y + 3, (205, 198, 184), 14, 0.3, -self.face * 70, 10, 0.45))
+        else:
+            self.slash_row, self.slash_total, self.slash_at = 'slash', HERO_SLASH_TIME, HERO_SLASH_HIT
         self.slash_t = self.slash_total
         self.slash_struck = False
+        self.slash_hit = best
+        self.slash_fort = self.x >= FORTRESS_X - 110
+        self.slash_done = False
         sound.sfx('slash')
-        if self.curve_k > 0 or self.land_t > 0 or self.turn_t > 0:   # 칼 휘두르는 그림을 못 쓰는 동작 중에는 궤적만
+        if busy:                          # 칼 휘두르는 그림을 못 쓰는 동작 중에는 궤적만
             effect.add(effect.Slash(self, 'Q', self.face, 110, 22))
-        if best:
-            g, part = best
-            dealt, killed = g.hit(part, ATTACK * self.blade)
-            if part == 'neck' and dealt > 0:
-                self.face = 1 if g.nape()[0] >= self.x else -1
-                play_mode.neck_juice(g, dealt, killed, self.face)
-        if self.x >= FORTRESS_X - 110:
+
+    def strike(self):
+        """칼이 닿는 순간: 피해를 넣고, 맞췄으면 멈칫·움찔·파고들기로 타격감을 준다"""
+        self.slash_done = True
+        if self.slash_fort:
             play_mode.fortress.damage(FORT_DAMAGE * self.blade, self.x + 20, self.y + 18)
+        if self.slash_hit is None or self.dead:
+            return
+        g, part = self.slash_hit
+        if not g.alive():
+            return
+        dealt, killed = g.hit(part, ATTACK * self.blade)
+        if dealt <= 0:
+            return
+        hx = g.nape()[0] if part == 'neck' else g.x
+        d = 1 if hx >= self.x else -1
+        g.flinch(d, part == 'neck')
+        if part == 'neck':
+            if self.state_machine.cur_state is not self.GROUND:   # 땅에서는 벨 때 이미 돌아섰다 (돌아서는 그림이 끼지 않게)
+                self.face = d
+            play_mode.neck_juice(g, dealt, killed, d)
+        else:
+            play_mode.body_juice(g, self.y + 18, d, killed)
 
     def tornado(self):
         """W: 거인 발목 앞(같은 줄 땅 위)에 있을 때만, 그 거인의 목 높이까지 회오리처럼 솟아올라 목덜미를 벤다."""
@@ -481,6 +539,8 @@ class Player:
         self.hit_t = max(0.0, self.hit_t - dt)
         if self.slash_t > 0:
             self.slash_t = max(0.0, self.slash_t - dt)
+            if not self.slash_done and 1 - self.slash_t / self.slash_total >= self.slash_at:
+                self.strike()
             if self.slash_t <= 0:
                 self.run_phase = 0.3          # 베기 그림의 끝이 달리기 3번째 장과 이어진다
         # 맞지 않고 버티는 동안 체력이 천천히 다시 찬다
@@ -520,6 +580,17 @@ class Player:
             return int(k / HERO_WIRE_SLASH_HIT * 9)
         return min(n - 1, 9 + int((k - HERO_WIRE_SLASH_HIT) / (1 - HERO_WIRE_SLASH_HIT) * (n - 9)))
 
+    def hit_slash_pos(self):
+        """도약 베기 진행 (장 단위 실수): 도약하며 칼을 뻗는 앞부분은 빠르게, 휘두르는 장부터는 천천히"""
+        n = FRAMES['hit_slash']
+        k = 1 - self.slash_t / self.slash_total
+        if k < HERO_HIT_SLASH_HIT:
+            return k / HERO_HIT_SLASH_HIT * LEAP_WIND
+        return LEAP_WIND + (k - HERO_HIT_SLASH_HIT) / (1 - HERO_HIT_SLASH_HIT) * (n - LEAP_WIND)
+
+    def hit_slash_frame(self):
+        return min(FRAMES['hit_slash'] - 1, int(self.hit_slash_pos()))
+
     def pick_frame(self):
         st = self.state_machine.cur_state
         if self.dead:                     # 뒤로 넘어가는 모션 뒤 누운 자세 그대로
@@ -548,6 +619,8 @@ class Player:
             if self.slash_t > 0:              # 와이어로 날아가며 벤다
                 return 'wire_slash', self.wire_slash_frame(), rad
             return 'wire', loop('wire', self.anim_t, 20), rad
+        if self.slash_t > 0 and self.slash_row == 'hit_slash':
+            return 'hit_slash', self.hit_slash_frame(), 0.0
         if self.slash_t > 0:
             return 'slash', self.swing_frame(), 0.0
         if st is self.AIR or st is self.WIRE:
@@ -601,6 +674,10 @@ class Player:
             size = DRAW * (1 + HERO_CURVE_DEPTH * arc)    # 원을 돌며 화면 쪽으로 다가오고
             sy -= HERO_CURVE_DROP * arc                   # 조금 아래로 내려왔다가 돌아간다
             angle = came_from * HERO_CURVE_LEAN * arc     # 몸은 커브 안쪽으로 기운다
+        if row == 'hit_slash':            # 도약 베기: 발이 뜬 장 동안 낮은 포물선
+            a = (self.hit_slash_pos() - LEAP_AIR[0]) / (LEAP_AIR[1] - LEAP_AIR[0])
+            if 0 < a < 1:
+                sy += HERO_LEAP_LIFT * math.sin(math.pi * a)
         h = (CELL / 2 - BASE) * size / CELL           # 발에서 그림 가운데까지: 기울어도 발은 제자리
         px, py = sx - math.sin(angle) * h, sy + math.cos(angle) * h
         if row == 'wire_slash':           # 날아가는 몸은 몸 가운데를 축으로 돈다
