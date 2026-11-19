@@ -8,6 +8,7 @@ import render
 from config import *
 
 FAR_P, MID_P, FOG_P = 0.12, 0.4, 0.65
+LANE_DROP = 10    # 발판 그림 아래끝이 길 높이보다 내려가는 만큼 (그림 높이 20, 윗면은 길 위 10)
 
 
 def px(name):
@@ -123,15 +124,15 @@ class Background:
                     _, bottom = camera.to_screen(0, ly - 78)
                     render.rect(0, 0, SCREEN_W, bottom + 2, GROUND_FILL)   # 땅 그림 아래 빈칸
                 else:
-                    self.draw_strip(self.lane_mid, x1, x2, ly - 28, 128)
+                    self.draw_strip(self.lane_mid, x1, x2, ly - LANE_DROP, 128)
                     sx, _ = camera.to_screen(x1, 0)
                     img = self.lane_left
                     render.tint(img, zone_color(x1, 'rim'))
-                    img.draw_to_origin(sx - 18, ly - 28)
+                    img.draw_to_origin(sx - 18, ly - LANE_DROP)
                     sx, _ = camera.to_screen(x2, 0)
                     img = self.lane_right
                     render.tint(img, zone_color(x2, 'rim'))
-                    img.draw_to_origin(sx - 6, ly - 28)
+                    img.draw_to_origin(sx - 6, ly - LANE_DROP)
             for ax, _, z in map_data.anchors[i]:
                 if not camera.visible(ax - 70, ax + 70):
                     continue

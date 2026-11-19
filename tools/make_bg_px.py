@@ -182,19 +182,32 @@ def ground():
     save(t, 'ground_px.png')
 
 
+LANE_TOP = 12                    # 발판 윗부분(풀)에서 남기는 줄 수
+LANE_BOTTOM = 8                  # 발판 아랫부분(울퉁불퉁한 끝)에서 남기는 줄 수
+
+
+def thin(img):
+    """가운데 흙을 잘라 내고 윗부분과 아래 끝만 이어 붙여 발판 두께를 절반으로"""
+    end = img.getbbox()[3]
+    out = Image.new('RGBA', (img.width, LANE_TOP + LANE_BOTTOM))
+    out.paste(img.crop((0, 0, img.width, LANE_TOP)), (0, 0))
+    out.paste(img.crop((0, end - LANE_BOTTOM, img.width, end)), (0, LANE_TOP))
+    return out
+
+
 def lanes():
     s = src('ledge_raw.png')
     s = s.crop(s.getbbox())
     s = s.resize((s.width * 2, s.height * 2), Image.NEAREST)
     h = s.height
-    save(s.crop((0, 0, 24, h)), 'lane_px_left.png')
-    save(s.crop((s.width - 24, 0, s.width, h)), 'lane_px_right.png')
+    save(thin(s.crop((0, 0, 24, h))), 'lane_px_left.png')
+    save(thin(s.crop((s.width - 24, 0, s.width, h))), 'lane_px_right.png')
     cx = s.width // 2
     half = s.crop((cx - 64, 0, cx, h))
     mid = Image.new('RGBA', (128, h))
     mid.paste(half, (0, 0))
     mid.paste(ImageOps.mirror(half), (64, 0))
-    save(mid, 'lane_px_mid.png')
+    save(thin(mid), 'lane_px_mid.png')
 
 
 PROP_SCALE = 0.85                # 나무를 원본보다 조금 낮게
