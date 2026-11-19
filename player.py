@@ -218,7 +218,7 @@ class Wire:
             p.vy = 250 + max(0.0, uy * p.reel_speed * 0.3)
             # 튕겨 올라도 바로 위층까지는 넘지 않게: 고른 층에 내려앉는다
             lane = int((hy - LANE_Y[0]) // LANE_GAP)
-            if lane < 4:
+            if lane < TOP_FLOOR:
                 room = max(0.0, LANE_Y[lane + 1] - 12 - p.y)
                 p.vy = min(p.vy, math.sqrt(2 * GRAVITY * room))
             p.state_machine.handle_event(('ARRIVE', None))

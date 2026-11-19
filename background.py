@@ -113,13 +113,15 @@ class Background:
         render.untint(self.fog)
 
     def draw_terrain(self):
-        for i in range(5):
+        for i in range(FLOORS):
             ly = LANE_Y[i]
             for x1, x2 in map_data.lanes[i]:
                 if not camera.visible(x1, x2):
                     continue
                 if i == 0:
                     self.draw_strip(self.ground, x1, x2, ly - 78, 128)
+                    _, bottom = camera.to_screen(0, ly - 78)
+                    render.rect(0, 0, SCREEN_W, bottom + 2, GROUND_FILL)   # 땅 그림 아래 빈칸
                 else:
                     self.draw_strip(self.lane_mid, x1, x2, ly - 28, 128)
                     sx, _ = camera.to_screen(x1, 0)

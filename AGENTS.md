@@ -18,7 +18,7 @@ python main.py
 - `game_framework.py`: 모드 전환 (`change_mode` / `push_mode` / `pop_mode`)
 - 모드: `title_mode` → `play_mode` → `upgrade_mode`(카드 선택) → `result_mode`
 - `game_world.py`: 레이어별 오브젝트 관리, 충돌 판정
-- `config.py`: 화면 크기, 길 5줄 좌표, 레이어 상수, 구간(ZONES) 데이터
+- `config.py`: 화면 크기, 길 6줄 좌표, 레이어 상수, 구간(ZONES) 데이터
 - `state_machine.py`: 플레이어 상태 전이 (와이어, 착지, 낙하 등)
 - 오브젝트: `player`, `giant`, `ally`, `cannon`, `projectile`, `wall`, `fortress`, `effect`
 - 화면: `background`, `camera`, `render`, `ui`

@@ -149,7 +149,7 @@ def spawn(kind, x, k=None, lane=None, zone=None):
     sizes = KINDS[kind]['size']
     if k is None:
         # 그 자리에 깔린 층 수보다 큰 거인은 내지 않는다 (층이 적은 초반엔 작은 거인 위주)
-        floors = sum(1 for i in range(5) if any(x1 < x + 600 and x2 > x - 600 for x1, x2 in map_data.lanes[i]))
+        floors = sum(1 for i in range(FLOORS) if any(x1 < x + 600 and x2 > x - 600 for x1, x2 in map_data.lanes[i]))
         weights = SIZE_WEIGHTS[size_stage(x if zone is None else farthest_x)]
         allowed = [s for s in sizes if s <= floors and weights[s - 1] > 0] or [min(sizes)]
         k = random.choices(allowed, [weights[s - 1] or 1 for s in allowed])[0]

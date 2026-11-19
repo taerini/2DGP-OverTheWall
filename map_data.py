@@ -5,7 +5,7 @@ import random
 from config import *
 
 # 위쪽 길이 시작되는 x (오른쪽으로 갈수록 위로 갈라진다)
-LANE_START = [WALL_X, 700, 1500, 2500, 3500]
+LANE_START = [WALL_X, 700, 1500, 2500, 3500, 4500]
 
 lanes = []      # lanes[i] = [(x1, x2), ...]
 anchors = []    # anchors[i] = [(x, 길 y, 구간), ...]
@@ -16,7 +16,7 @@ def build():
     lanes.clear()
     anchors.clear()
     lanes.append([(0, MAP_W)])
-    for i in range(1, 5):
+    for i in range(1, FLOORS):
         segs = []
         x = LANE_START[i] + rnd.uniform(0, 200)
         end = FORTRESS_X - 120
@@ -48,7 +48,7 @@ def segment_at(lane, x):
 
 def landing_lane(x, y_prev, y_now):
     """y_prev → y_now 로 내려오면서 지나친 길 중 가장 높은 것"""
-    for i in range(4, -1, -1):
+    for i in range(TOP_FLOOR, -1, -1):
         ly = LANE_Y[i]
         if y_prev >= ly - 0.01 and y_now <= ly and segment_at(i, x):
             return i
@@ -56,9 +56,9 @@ def landing_lane(x, y_prev, y_now):
 
 
 def floor_at(y):
-    """높이 y 가 몇 층인가 (0~4). 길 윗면 사이를 한 층으로 친다 (맨 아래 길 아래는 0층, 맨 위 길 위는 4층)"""
+    """높이 y 가 몇 층인가 (0~TOP_FLOOR). 길 윗면 사이를 한 층으로 친다 (맨 아래 길 아래는 0층, 맨 위 길 위는 4층)"""
     f = 0
-    for i in range(5):
+    for i in range(FLOORS):
         if y >= LANE_Y[i]:
             f = i
     return f

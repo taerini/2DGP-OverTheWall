@@ -135,11 +135,11 @@ class Hud:
             return x0 + x / MAP_W * MINI_W
 
         def my(y):
-            return y0 + 4 + (y - LANE_Y[0]) / (LANE_Y[4] - LANE_Y[0] + 110) * (MINI_H - 8)
+            return y0 + 4 + (y - LANE_Y[0]) / (LANE_Y[TOP_FLOOR] - LANE_Y[0] + 110) * (MINI_H - 8)
 
         for z in range(1, ZONE_COUNT):
             render.rect(mx(z * ZONE_W), y0, mx(z * ZONE_W) + 1, y0 + MINI_H, (255, 255, 255), 40)
-        for i in range(5):
+        for i in range(FLOORS):
             for x1, x2 in map_data.lanes[i]:
                 render.rect(mx(x1), my(LANE_Y[i]), mx(x2), my(LANE_Y[i]) + 1, (200, 200, 200), 90)
         render.rect(x0, y0, mx(WALL_X), y0 + MINI_H, (140, 160, 180), 220)

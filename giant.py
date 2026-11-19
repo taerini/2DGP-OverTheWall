@@ -48,8 +48,8 @@ def giant_height(k, sh=SHEETS['basic']):
 
 
 def max_lane(k):
-    """머리가 화면을 넘지 않는 가장 높은 층 (0부터). 크기 1 → 5층, 크기 4 → 2층, 크기 5 → 1층"""
-    return 5 - k
+    """거인이 설 수 있는 가장 높은 층 (0부터). 크기 2 → 4, 크기 5 → 1"""
+    return FLOORS - k
 
 
 # 종류별 능력치. size 는 고를 수 있는 크기들
@@ -109,7 +109,7 @@ CRIT_RATE = 0.2
 CRIT_MULT = 1.5
 HP_BY_SIZE = {1: 110, 2: 175, 3: 245, 4: 320, 5: 400}
 # 수박 거인: 숨을 들이켜고(입 크게 벌림) → 수박씨를 가로로 곧게 뱉는다.
-# 주인공이 있는 층을 노린다: 5층은 점프, 4층은 선 채로, 3층은 쭈그려, 2층은 엎드려서. 1층(발밑)은 안전하다
+# 주인공이 있는 층을 노린다: 입보다 높은 층은 점프, 낮은 층은 쭈그려서. 1층(발밑)은 안전하다
 MELON_INHALE = 0.8       # 숨 들이켜는 시간 (노린 층에 빨간 띠로 예고)
 MELON_SPIT = 2.0         # 씨를 뱉는 시간
 MELON_SEEDS = 10         # 한 번에 뱉는 씨 수
@@ -117,7 +117,7 @@ MELON_CD = 3.0           # 다 뱉고 나서 다음 공격까지
 MELON_RANGE = 1000.0     # 주인공이 가로로 이만큼 안에 있으면 공격한다
 MELON_RECOVER = 0.35     # 뱉고 나서 원래 자세로 돌아오는 시간
 MELON_MOUTH = (0.21, 0.57)   # 입 위치: 키에 대한 비율 (앞쪽으로, 발밑에서 위로). giant_melon 그림에서 잰 값
-MELON_HEIGHT = 520.0     # 키: 수박 머리 2.5층, 덩굴 몸 1.5층 (서 있으면 입이 3층, 목이 2층 높이)
+MELON_HEIGHT = 452.0     # 키: 수박 머리 2.5층, 덩굴 몸 1.5층 (서 있으면 입이 3층, 목이 2층 높이)
 MELON_POSE_GAP = 60.0    # 입 높이 차이가 이보다 크면 점프 / 쭈그리기 자세를 쓴다
 MELON_JUMP_HOLD = (4, 5)     # 씨를 뱉는 동안 번갈아 쓰는 공중 프레임 (jump 줄)
 MELON_JUMP_RISE = 14.0       # 공중 프레임에서 그림이 떠 있는 높이 (그림 단위)
@@ -125,7 +125,7 @@ MELON_CROUCH_DROP = 22.0     # 가장 깊이 숙인 프레임(crouch 3번)에서
 
 
 def floor_of(y):
-    return max(0, min(4, int((y - LANE_Y[0]) // LANE_GAP)))
+    return max(0, min(TOP_FLOOR, int((y - LANE_Y[0]) // LANE_GAP)))
 
 
 class Giant:
@@ -329,7 +329,7 @@ class Giant:
         if not (camera.x + 60 < self.x < camera.x + SCREEN_W - 60):
             return False                        # 화면에 보일 때만 (안 보이는 곳에서 쏘지 않는다)
         self.dir = 1 if p.x > self.x else -1
-        self.melon_floor = max(1, min(4, p.floor()))
+        self.melon_floor = max(1, min(TOP_FLOOR, p.floor()))
         self.state, self.state_t = 'inhale', MELON_INHALE
         sound.sfx_at('melon_inhale', self.x)
         self.seeds_left = MELON_SEEDS
@@ -375,7 +375,7 @@ class Giant:
             return None
         neck = self.neck_floor()
         top = self.get_bb()[3]
-        if floor == neck or (floor == neck + 1 and floor <= 4 and top > LANE_Y[floor]):
+        if floor == neck or (floor == neck + 1 and floor <= TOP_FLOOR and top > LANE_Y[floor]):
             return 'neck'
         if floor > neck:
             return None

@@ -2,10 +2,14 @@ SCREEN_W, SCREEN_H = 1280, 720
 
 # 맵: 구간들 (이야기 흐름 순서), 왼쪽 끝은 우리 벽, 오른쪽 끝은 적 요새
 MAP_LEN = 36000              # 맵 전체 길이 (구간 수와 상관없이 같다)
-# 길 5줄 (윗면 y)
-LANE_GAP = 115
-LANE_Y = [70 + LANE_GAP * i for i in range(5)]
-ANCHOR_H = 100               # 길에서 와이어 거는 점까지 높이 (가장 높게)
+# 길 6줄 (윗면 y)
+FLOORS = 6
+TOP_FLOOR = FLOORS - 1
+LANE_BASE = 110              # 맨 아래 길 높이. 맨 위층 위 공간이 다른 층과 비슷하게 남도록 올렸다
+LANE_GAP = 100
+LANE_Y = [LANE_BASE + LANE_GAP * i for i in range(FLOORS)]
+GROUND_FILL = (43, 22, 30)      # 맨 아래 땅 그림 밑을 채우는 색
+ANCHOR_H = 87               # 길에서 와이어 거는 점까지 높이 (가장 높게)
 ANCHOR_LOW = 30              # 가장 낮게. 이 사이에서 클릭한 높이에 건다
 
 GRAVITY = 1500.0
