@@ -44,7 +44,8 @@ KIND_SHEET = {'erratic': 'thin', 'smart': 'female', 'thrower': 'beast', 'melon':
 
 def giant_height(k, sh=SHEETS['basic']):
     """크기 k 거인의 키. 서 있을 때 목덜미가 (서 있는 층 + k - 1)층 한가운데쯤 오게 맞춘다."""
-    return ((k - 1) * LANE_GAP + 70 - (k - 1) * 6.25) / sh.walk_nape
+    nape = GIANT_NAPE_H.get(k, (k - 1) * LANE_GAP + 70 - (k - 1) * 6.25)
+    return nape / sh.walk_nape
 
 
 def max_lane(k):
@@ -52,13 +53,13 @@ def max_lane(k):
     return FLOORS - k
 
 
-# 종류별 능력치. size 는 고를 수 있는 크기들
+# 종류별 능력치. size 는 고를 수 있는 크기들 (가장 작은 거인은 2m)
 KINDS = {
-    'normal':   dict(size=(1, 2, 3, 4, 5), speed=(55, 80), hp=1.0),
-    'erratic':  dict(size=(1, 2), speed=(105, 130), hp=0.9),   # 마른 거인: 빠르고, 붙으면 돌진 공격
-    'climber':  dict(size=(1, 2, 3), speed=(50, 70), hp=1.0),
-    'swarm':    dict(size=(1,), speed=(85, 110), hp=0.8),
-    'armed':    dict(size=(1, 2, 3, 4, 5), speed=(48, 66), hp=1.3),
+    'normal':   dict(size=(2, 3, 4, 5), speed=(55, 80), hp=1.0),
+    'erratic':  dict(size=(2,), speed=(105, 130), hp=0.9),   # 마른 거인: 빠르고, 붙으면 돌진 공격
+    'climber':  dict(size=(2, 3), speed=(50, 70), hp=1.0),
+    'swarm':    dict(size=(2,), speed=(85, 110), hp=0.8),
+    'armed':    dict(size=(2, 3, 4, 5), speed=(48, 66), hp=1.3),
     'smart':    dict(size=(3,), speed=(125, 125), hp=3.2, boss='빠르고 영리한 거인'),
     'thrower':  dict(size=(4,), speed=(26, 26), hp=3.0, boss='돌 던지는 거인'),
     'colossal': dict(size=(5,), speed=(20, 20), hp=3.0, boss='거대 거인'),
@@ -107,7 +108,7 @@ PART_NAME = {'neck': '목덜미', 'ankle': '발목', 'body': '몸통'}
 DMG_SPREAD = (0.85, 1.15)    # 벨 때마다 피해가 이 범위에서 흔들린다
 CRIT_RATE = 0.2
 CRIT_MULT = 1.5
-HP_BY_SIZE = {1: 110, 2: 175, 3: 245, 4: 320, 5: 400}
+HP_BY_SIZE = {2: 175, 3: 245, 4: 320, 5: 400}
 # 수박 거인: 숨을 들이켜고(입 크게 벌림) → 수박씨를 가로로 곧게 뱉는다.
 # 주인공이 있는 층을 노린다: 입보다 높은 층은 점프, 낮은 층은 쭈그려서. 1층(발밑)은 안전하다
 MELON_INHALE = 0.8       # 숨 들이켜는 시간 (노린 층에 빨간 띠로 예고)

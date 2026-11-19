@@ -570,10 +570,11 @@ class Player:
         # 와이어 줄
         if self.hook:
             hx, hy = self.hook
-            d = math.hypot(hx - cx, hy - (self.y + 16))
+            wy = self.y + HERO_HEIGHT * 0.3            # 와이어가 나오는 허리 높이
+            d = math.hypot(hx - cx, hy - wy)
             k = 1.0 if self.reeling else min(1.0, self.rope / max(d, 1))
-            ex, ey = cx + (hx - cx) * k, self.y + 16 + (hy - self.y - 16) * k
-            sx1, sy1 = camera.to_screen(cx, self.y + 16)
+            ex, ey = cx + (hx - cx) * k, wy + (hy - wy) * k
+            sx1, sy1 = camera.to_screen(cx, wy)
             sx2, sy2 = camera.to_screen(ex, ey)
             nx, ny = -(sy2 - sy1), sx2 - sx1
             n = math.hypot(nx, ny) or 1
